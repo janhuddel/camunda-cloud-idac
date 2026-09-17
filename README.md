@@ -32,29 +32,46 @@ role is always fine and unaffected by any of the above; only deleting the
 role itself, mutating its authorizations, or unassigning the tool's own
 client from it are guarded.
 
-## Setup
+## Installation
+
+Set the `CAMUNDA_*` connection env vars first (OAuth client credentials for
+an M2M client with admin authorizations, cluster REST address, optional
+mTLS) - see `.env.example` for the full list.
+
+Run without installing:
 
 ```sh
-npm install
-cp .env.example .env   # fill in CAMUNDA_* connection details, then export them
+npx camunda-cloud-idac plan spec.yaml [--prune]
 ```
 
-`createCamundaClientLoose()` reads `CAMUNDA_*` env vars directly - see
-`.env.example` for the ones you need (OAuth client credentials for an M2M
-client with admin authorizations, cluster REST address, optional mTLS).
-
-## Usage
+Or install globally and use the `camunda-idac` (or shorter `cci`) command:
 
 ```sh
-npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity only, no network
-npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
-npx tsx src/cli.ts apply spec.yaml [--prune] [--yes]
+npm install -g camunda-cloud-idac
+
+camunda-idac validate spec.yaml
+camunda-idac plan spec.yaml [--prune]
+camunda-idac apply spec.yaml [--prune] [--yes]
+
+# cci is an alias for camunda-idac
+cci plan spec.yaml
 ```
 
 `--prune` absent = additive mode (default): only creates/updates, never
 deletes. `apply` without `--yes` prints the plan and asks for interactive
 confirmation; it refuses to run without `--yes` on a non-interactive shell
 (CI), so a pipeline can never silently confirm a destructive prune.
+
+## Development
+
+```sh
+npm install
+cp .env.example .env   # fill in CAMUNDA_* connection details, then export them
+
+npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity only, no network
+npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
+npx tsx src/cli.ts apply spec.yaml [--prune] [--yes]
+```
 
 Build once for a compiled binary: `npm run build && node dist/cli.js ...`.
 

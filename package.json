@@ -1,16 +1,39 @@
 {
   "name": "camunda-cloud-idac",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Identity-as-code reconciler for Camunda 8 (tenants, roles, groups, mapping rules, authorizations)",
   "type": "module",
-  "bin": {
-    "camunda-idac": "./dist/cli.js"
+  "license": "MIT",
+  "author": "Jan Rohwer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janhuddel/camunda-cloud-idac.git"
   },
+  "homepage": "https://github.com/janhuddel/camunda-cloud-idac#readme",
+  "bugs": {
+    "url": "https://github.com/janhuddel/camunda-cloud-idac/issues"
+  },
+  "keywords": [
+    "camunda",
+    "camunda-8",
+    "zeebe",
+    "identity-as-code",
+    "iac",
+    "cli"
+  ],
+  "bin": {
+    "camunda-idac": "./dist/cli.js",
+    "cci": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@camunda8/orchestration-cluster-api": "9.1.5",
