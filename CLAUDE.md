@@ -19,6 +19,7 @@ npm install
 cp .env.example .env   # fill in CAMUNDA_* connection details
 
 npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity only, no network
+npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes]
 
@@ -45,7 +46,9 @@ Pipeline, front to back: `spec/load.ts` (YAML → validated `Spec`) →
 `reconcile/diff.ts` (`buildPlan()`, `Spec` + `CurrentState` → `ReconciliationPlan`)
 → `reconcile/apply.ts` (executes the plan) → `reconcile/format.ts` (renders plan /
 result for the CLI). `src/cli.ts` wires these together per subcommand
-(`validate`/`plan`/`apply`) via `commander`.
+(`validate`/`render`/`plan`/`apply`) via `commander`. `render` just loads the spec
+(resolving composition if it's an environment file) and prints it back as YAML via
+the `yaml` package's `stringify` - no network access, same as `validate`.
 
 ### Spec and validation (`src/spec/`)
 

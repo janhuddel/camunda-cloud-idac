@@ -69,6 +69,7 @@ npm install
 cp .env.example .env   # fill in CAMUNDA_* connection details, then export them
 
 npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity only, no network
+npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes]
 ```
@@ -92,7 +93,7 @@ there's no referential-integrity check on them (any string is accepted).
 
 ## Environment files
 
-The single `<spec>` argument to `validate`/`plan`/`apply` can be either a
+The single `<spec>` argument to `validate`/`render`/`plan`/`apply` can be either a
 flat spec (above) or an **environment file** that composes several spec
 fragments into one, for organizations that run the same identity model
 across multiple environments/clusters with per-cluster differences:
@@ -116,6 +117,11 @@ no such field, so detection can't collide with the existing format).
 `include` paths resolve relative to the environment file's own directory.
 See `test/fixtures/compose/` for a complete worked example (base + 3
 procapp fragments + a full and a partial environment file).
+
+Use `camunda-idac render <spec>` to print the fully composed and
+interpolated spec as YAML - useful to double-check what an environment
+file actually resolves to (which procapps ended up included, what
+`${VAR}` placeholders became) before running `plan`/`apply` against it.
 
 **Fragments** are plain YAML files shaped like a spec, but looser: only
 each entity's ID field (`tenantId`/`roleId`/`groupId`/`mappingRuleId`) is

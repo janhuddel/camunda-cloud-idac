@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
+import { stringify as stringifyYaml } from "yaml";
 import { loadSpec, SpecValidationError } from "./spec/load.js";
 import { fetchCurrentState } from "./camunda/list-all.js";
 import { buildPlan, type Mode } from "./reconcile/diff.js";
@@ -62,6 +63,20 @@ program
     try {
       await loadSpec(specPath);
       console.log("Spec is valid.");
+    } catch (err) {
+      reportError(err);
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("render")
+  .description("print the fully resolved spec as YAML - resolves include/values composition, no network access")
+  .argument("<spec>", "path to the YAML spec file or environment file")
+  .action(async (specPath: string) => {
+    try {
+      const spec = await loadSpec(specPath);
+      console.log(stringifyYaml(spec));
     } catch (err) {
       reportError(err);
       process.exitCode = 1;
