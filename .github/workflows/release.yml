@@ -10,14 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write # required for npm Trusted Publishing (OIDC) - no NPM_TOKEN secret needed
     steps:
       - uses: actions/checkout@v4
 
+      # Trusted Publishing has hard floors of Node >=22.14.0 and npm >=11.5.1.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
 
+      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -36,6 +39,7 @@ jobs:
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
 
-      - run: npm publish --tag ${{ steps.dist-tag.outputs.tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Authenticates via OIDC against the Trusted Publisher configured on
+      # npmjs.com for this package (Settings > Trusted Publisher > GitHub
+      # Actions) - no NPM_TOKEN secret involved.
+      - run: npm publish --tag ${{ steps.dist-tag.outputs.tag }} --provenance
