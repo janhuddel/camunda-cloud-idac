@@ -36,11 +36,15 @@ function getGuardianClientId(): string | undefined {
  *     assigned to the admin role) is unaffected by this rule.
  *  4. The `<default>` system tenant is never deleted (defense in depth - the API
  *     already rejects this server-side).
+ *  5. The "admin" role never loses its assignment to the `<default>` tenant, so
+ *     a full `--prune` reset can never leave the admin role without access to
+ *     the default tenant. Every other tenant<->role pair (including the admin
+ *     role's assignment to any other tenant) is unaffected by this rule.
  *
- * Only entity-delete/authorization-mutation/the one guarded unassign-role-client
- * edge are ever blocked. Every other unassign-* action - including removing
- * other roles/members from the admin role, or removing a non-guardian client
- * from it - passes through untouched.
+ * Only entity-delete/authorization-mutation/the two guarded unassign edges
+ * (unassign-role-client, unassign-tenant-role) are ever blocked. Every other
+ * unassign-* action - including removing other roles/members from the admin
+ * role, or removing a non-guardian client from it - passes through untouched.
  */
 export function applyProtections(actions: PlannedAction[]): { actions: PlannedAction[]; warnings: string[] } {
   const warnings: string[] = [];
@@ -75,6 +79,14 @@ export function applyProtections(actions: PlannedAction[]): { actions: PlannedAc
       return block(
         `this tool's own client ("${guardianClientId}") must keep the "${PROTECTED_ROLE_ID}" role, or a full reset would lock the tool out`,
       );
+    }
+
+    if (
+      target.kind === "unassign-tenant-role" &&
+      target.tenantId === PROTECTED_TENANT_ID &&
+      target.roleId === PROTECTED_ROLE_ID
+    ) {
+      return block(`the "${PROTECTED_ROLE_ID}" role must never be unassigned from the ${PROTECTED_TENANT_ID} tenant`);
     }
 
     return true;

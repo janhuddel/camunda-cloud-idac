@@ -78,6 +78,36 @@ describe("applyProtections - unit level", () => {
     expect(actions).toHaveLength(1);
   });
 
+  it("blocks unassigning the admin role from the <default> tenant", () => {
+    const action = fakeAction({
+      kind: "unassign-tenant-role",
+      target: { kind: "unassign-tenant-role", tenantId: "<default>", roleId: "admin" },
+    });
+    const { actions, warnings } = applyProtections([action]);
+    expect(actions).toHaveLength(0);
+    expect(warnings[0]).toMatch(/admin.*never be unassigned.*<default>/i);
+  });
+
+  it("does NOT block unassigning a different role from the <default> tenant", () => {
+    const action = fakeAction({
+      kind: "unassign-tenant-role",
+      target: { kind: "unassign-tenant-role", tenantId: "<default>", roleId: "not-admin" },
+    });
+    const { actions, warnings } = applyProtections([action]);
+    expect(actions).toHaveLength(1);
+    expect(warnings).toHaveLength(0);
+  });
+
+  it("does NOT block unassigning the admin role from a non-default tenant", () => {
+    const action = fakeAction({
+      kind: "unassign-tenant-role",
+      target: { kind: "unassign-tenant-role", tenantId: "some-tenant", roleId: "admin" },
+    });
+    const { actions, warnings } = applyProtections([action]);
+    expect(actions).toHaveLength(1);
+    expect(warnings).toHaveLength(0);
+  });
+
   it("does NOT block unassign-* actions that remove a member from the admin role", () => {
     const actions = [
       fakeAction({ kind: "unassign-role-group", target: { kind: "other" } }),
@@ -248,6 +278,31 @@ describe("applyProtections - integration with buildPlan (prune mode)", () => {
     expect(plan.warnings.some((w) => /authorizations.*"admin".*never be created, updated, or deleted/i.test(w))).toBe(
       true,
     );
+  });
+
+  it("never unassigns the admin role from the <default> tenant during a full prune reset", () => {
+    const spec = Spec.parse({}); // spec says nothing about tenant-role assignments
+    const current = currentState({
+      roles: [{ roleId: "admin", name: "Admin", description: null }],
+      tenants: [{ tenantId: "<default>", name: "Default", description: null }],
+      relationships: { tenantRole: new Set(["<default>::admin"]) },
+    });
+
+    const plan = buildPlan(spec, current, "prune");
+    expect(plan.actions.map((a) => a.kind)).not.toContain("unassign-tenant-role");
+    expect(plan.warnings.some((w) => /admin.*never be unassigned.*<default>/i.test(w))).toBe(true);
+  });
+
+  it("still prunes a non-admin role from the <default> tenant", () => {
+    const spec = Spec.parse({});
+    const current = currentState({
+      roles: [{ roleId: "process-owner", name: "Process Owner", description: null }],
+      tenants: [{ tenantId: "<default>", name: "Default", description: null }],
+      relationships: { tenantRole: new Set(["<default>::process-owner"]) },
+    });
+
+    const plan = buildPlan(spec, current, "prune");
+    expect(plan.actions.map((a) => a.kind)).toContain("unassign-tenant-role");
   });
 
   describe("guardian client protection end-to-end", () => {

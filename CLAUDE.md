@@ -133,6 +133,11 @@ Applied unconditionally after diffing, regardless of spec content:
   self-healing).
 - The `<default>` system tenant is never deleted (defense in depth — the API
   already rejects this server-side).
+- The `admin` role never loses its assignment to the `<default>` tenant, so a
+  full `--prune` reset can never leave the tenant without an admin role. Like the
+  guardian-client guard, this only protects an *existing* assignment from
+  removal — it does not proactively assign the role if that assignment is
+  missing.
 
 The `admin` *group* (if one exists) has **no special protection** — it's
 reconciled like any other group, including deletion under `--prune`. Adding or

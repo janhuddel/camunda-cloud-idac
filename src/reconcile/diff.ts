@@ -340,6 +340,7 @@ function diffRelationships(spec: Spec, current: CurrentState, mode: Mode, action
     (tenantId, roleId) => tenantOps.assignRole(tenantId, roleId),
     (tenantId, roleId) => tenantOps.unassignRole(tenantId, roleId),
     actions,
+    (tenantId, roleId) => ({ kind: "unassign-tenant-role", tenantId, roleId }),
   );
 
   diffRelationship(

@@ -128,6 +128,9 @@ export type ActionTarget =
   // relationship edge (the tool's own client keeping the admin role) without
   // touching any other role-client pair.
   | { kind: "unassign-role-client"; roleId: string; clientId: string }
+  // Lets protect.ts guard the one specific edge (admin role staying assigned to
+  // the <default> tenant) without touching any other tenant-role pair.
+  | { kind: "unassign-tenant-role"; tenantId: string; roleId: string }
   | { kind: "other" };
 
 export interface PlannedAction {
