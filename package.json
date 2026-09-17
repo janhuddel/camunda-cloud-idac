@@ -1,6 +1,6 @@
 {
   "name": "camunda-cloud-idac",
-  "version": "1.1.0-beta.2",
+  "version": "1.1.0",
   "description": "Identity-as-code reconciler for Camunda 8 (tenants, roles, groups, mapping rules, authorizations)",
   "type": "module",
   "license": "MIT",
