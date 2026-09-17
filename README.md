@@ -50,8 +50,10 @@ Or install globally and use the `camunda-idac` (or shorter `cci`) command:
 npm install -g camunda-cloud-idac
 
 camunda-idac validate spec.yaml
+camunda-idac ping                       # check cluster connectivity - no spec needed
 camunda-idac plan spec.yaml [--prune]
 camunda-idac apply spec.yaml [--prune] [--yes]
+camunda-idac --version
 
 # cci is an alias for camunda-idac
 cci plan spec.yaml
@@ -70,6 +72,7 @@ cp .env.example .env   # fill in CAMUNDA_* connection details, then export them
 
 npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity only, no network
 npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
+npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes]
 ```

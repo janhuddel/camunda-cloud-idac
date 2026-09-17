@@ -20,8 +20,10 @@ cp .env.example .env   # fill in CAMUNDA_* connection details
 
 npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity only, no network
 npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
+npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes]
+npx tsx src/cli.ts --version                   # print the tool's version
 
 npm run typecheck   # tsc --noEmit, includes test/ via tsconfig.typecheck.json
 npm test            # vitest run — schema, diff, protect (safety-critical), order

@@ -1,8 +1,10 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
 import { stringify as stringifyYaml } from "yaml";
 import { loadSpec, SpecValidationError } from "./spec/load.js";
+import { checkConnection } from "./camunda/client.js";
 import { fetchCurrentState } from "./camunda/list-all.js";
 import { buildPlan, type Mode } from "./reconcile/diff.js";
 import { applyPlan } from "./reconcile/apply.js";
@@ -52,8 +54,15 @@ async function fetchCurrentStateWithProgress(): ReturnType<typeof fetchCurrentSt
   }
 }
 
+const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+  version: string;
+};
+
 const program = new Command();
-program.name("camunda-idac").description("Identity-as-code reconciler for Camunda 8 (tenants, roles, groups, mapping rules, authorizations)");
+program
+  .name("camunda-idac")
+  .description("Identity-as-code reconciler for Camunda 8 (tenants, roles, groups, mapping rules, authorizations)")
+  .version(version, "-v, --version", "output the current version");
 
 program
   .command("validate")
@@ -79,6 +88,21 @@ program
       console.log(stringifyYaml(spec));
     } catch (err) {
       reportError(err);
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("ping")
+  .description("check that the cluster is reachable and credentials are valid - no spec needed")
+  .action(async () => {
+    const result = await checkConnection();
+    if (result.ok) {
+      const t = result.value;
+      console.log(`Connected. Gateway version ${t.gatewayVersion}, cluster ${t.clusterId ?? "<unknown>"}.`);
+      console.log(`Cluster size: ${t.clusterSize}, partitions: ${t.partitionsCount}, replication factor: ${t.replicationFactor}.`);
+    } else {
+      reportError(result.error);
       process.exitCode = 1;
     }
   });

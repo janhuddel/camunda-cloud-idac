@@ -33,3 +33,9 @@ export async function toResult<T>(op: () => Promise<T>): Promise<Result<T>> {
     return { ok: false, error };
   }
 }
+
+/** Lightweight connectivity check: fetches cluster topology, which requires no
+ * arguments and touches no entity data - just OAuth + a reachable gateway. */
+export function checkConnection(): Promise<Result<Awaited<ReturnType<CamundaClientLoose["getTopology"]>>>> {
+  return toResult(() => getClient().getTopology());
+}
