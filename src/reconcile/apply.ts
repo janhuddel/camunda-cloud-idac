@@ -3,7 +3,7 @@ import type { ApplyResult, PlannedAction, ReconciliationPlan } from "./types.js"
 /** Reported by `applyPlan` before and after each action executes. */
 export type ApplyProgressEvent =
   | { type: "start"; index: number; total: number; action: PlannedAction }
-  | { type: "done"; index: number; total: number; action: PlannedAction; ok: boolean; durationMs: number };
+  | { type: "done"; index: number; total: number; action: PlannedAction; ok: boolean };
 
 /**
  * Best-effort executor: run every planned action in order, continue past
@@ -28,15 +28,13 @@ export async function applyPlan(
 
   for (const [index, action] of plan.actions.entries()) {
     onProgress?.({ type: "start", index, total, action });
-    const startedAt = Date.now();
     const result = await action.execute();
-    const durationMs = Date.now() - startedAt;
     if (result.ok) {
       succeeded.push(action);
     } else {
       failed.push({ action, error: result.error });
     }
-    onProgress?.({ type: "done", index, total, action, ok: result.ok, durationMs });
+    onProgress?.({ type: "done", index, total, action, ok: result.ok });
   }
 
   return { succeeded, failed, skippedProtected: plan.warnings };

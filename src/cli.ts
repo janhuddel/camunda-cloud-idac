@@ -7,7 +7,6 @@ import { buildPlan, type Mode } from "./reconcile/diff.js";
 import { applyPlan } from "./reconcile/apply.js";
 import { formatApplyResult, formatPlan } from "./reconcile/format.js";
 import { createProgressReporter } from "./progress.js";
-import { createColors } from "./colors.js";
 
 // Load ./.env into process.env (if present) so CAMUNDA_* vars work without the
 // operator having to `export` each line by hand. Silently ignored when there's
@@ -33,26 +32,10 @@ function reportError(err: unknown): void {
   }
 }
 
-// Progress output goes to stderr (see progress.ts), so its color-enablement
-// must be judged against stderr's TTY-ness, not stdout's - a separate
-// `Colors` instance from the one `format.ts` uses for stdout.
-const errColors = createColors(process.stderr);
-
-/** Formats an elapsed duration for a progress line, colored by how slow it
- * was - lets a real cluster's slow individual requests (which the aggregate
- * phase counter alone can't show) stand out at a glance. */
-function formatDuration(durationMs: number): string {
-  const text = `${(durationMs / 1000).toFixed(1)}s`;
-  if (durationMs >= 5000) return errColors.red(text);
-  if (durationMs >= 2000) return errColors.yellow(text);
-  return errColors.dim(text);
-}
-
 async function fetchCurrentStateWithProgress(): ReturnType<typeof fetchCurrentState> {
   const progress = createProgressReporter();
   try {
     const current = await fetchCurrentState((e) => {
-      progress.log(`  ${errColors.green("✓")} ${e.label} ${formatDuration(e.durationMs)}`);
       progress.update(
         e.phase === "entities"
           ? `Fetching entities… (${e.completed}/${e.total})`
@@ -147,9 +130,6 @@ program
         result = await applyPlan(plan, (e) => {
           if (e.type === "start") {
             applyProgress.update(`[${e.index + 1}/${e.total}] ${e.action.description}`);
-          } else {
-            const mark = e.ok ? errColors.green("✓") : errColors.red("✗");
-            applyProgress.log(`  ${mark} ${e.action.description} ${formatDuration(e.durationMs)}`);
           }
         });
       } finally {

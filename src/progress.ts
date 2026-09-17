@@ -28,7 +28,15 @@ export function createProgressReporter(stream: NodeJS.WriteStream = process.stde
   const elapsed = () => `${((Date.now() - start) / 1000).toFixed(1)}s`;
 
   function render(): void {
-    stream.write(`\r\x1b[K${SPINNER_FRAMES[frame % SPINNER_FRAMES.length]} ${currentText} (${elapsed()})`);
+    const line = `${SPINNER_FRAMES[frame % SPINNER_FRAMES.length]} ${currentText} (${elapsed()})`;
+    // A line longer than the terminal wraps onto a second row, and `\r\x1b[K`
+    // only rewinds/clears the current row - the wrapped remainder of the
+    // previous frame would then be left behind on the row above. Truncating
+    // to the terminal width keeps every frame a single row, so redraws always
+    // cleanly overwrite the last one.
+    const width = stream.columns;
+    const truncated = width && line.length > width ? `${line.slice(0, width - 1)}…` : line;
+    stream.write(`\r\x1b[K${truncated}`);
     frame++;
     lineIsOpen = true;
   }
