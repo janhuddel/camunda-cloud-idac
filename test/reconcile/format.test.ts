@@ -16,6 +16,7 @@ describe("formatPlan", () => {
   const plan: ReconciliationPlan = {
     actions: [fakeAction('create role "process-owner"')],
     warnings: ['BLOCKED (the <default> system tenant must never be deleted): delete tenant "<default>"'],
+    conflicts: [],
   };
 
   it("hides protection warnings by default - they're structural noise once the policy is known", () => {
@@ -32,9 +33,21 @@ describe("formatPlan", () => {
   });
 
   it("never shows an empty 'Protected' header when there are no warnings, even with showProtected", () => {
-    const noWarnings: ReconciliationPlan = { actions: [], warnings: [] };
+    const noWarnings: ReconciliationPlan = { actions: [], warnings: [], conflicts: [] };
     const output = formatPlan(noWarnings, { showProtected: true });
     expect(output).not.toContain("Protected");
+  });
+
+  it("always shows conflicts, unlike protection warnings, since they need a spec change and aren't structural noise", () => {
+    const withConflict: ReconciliationPlan = {
+      actions: [],
+      warnings: [],
+      conflicts: ['mapping rule "new-id" (claim azp=123) cannot be created: mapping rule "old-id" already uses this exact claim.'],
+    };
+    const output = formatPlan(withConflict);
+    expect(output).toContain("Conflicts (need manual resolution):");
+    expect(output).toContain("new-id");
+    expect(output).toContain("old-id");
   });
 });
 

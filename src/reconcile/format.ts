@@ -43,6 +43,12 @@ export function formatPlan(plan: ReconciliationPlan, opts: { showProtected?: boo
     lines.push(`${plan.actions.length} action(s) planned.`);
   }
 
+  if (plan.conflicts.length > 0) {
+    lines.push("");
+    lines.push(red("Conflicts (need manual resolution):"));
+    for (const conflict of plan.conflicts) lines.push(red(`  ! ${conflict}`));
+  }
+
   if (opts.showProtected && plan.warnings.length > 0) {
     lines.push("");
     lines.push("Protected (left untouched):");

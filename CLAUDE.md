@@ -105,6 +105,21 @@ the raw SDK calls.
   `spec`. `buildPlan` always finishes by piping the raw action list through
   `applyProtections()` (protect.ts) and then `sortActions()` (order.ts) — the
   safety guard and dependency ordering are unconditional, not mode-dependent.
+  Before diffing, `findMappingRuleClaimConflicts()` checks desired mapping rules
+  against `current` for a claim collision: Camunda allows only one mapping rule
+  per `(claimName, claimValue)` pair cluster-wide, so a spec declaring a fresh
+  `mappingRuleId` that reuses a claim already owned by a different live id (e.g.
+  one created by Camunda 8.8's built-in boot-time Identity-as-code feature, or
+  left over from an earlier, differently-keyed run) can never be created as-is.
+  Matched ids are collected into `conflictedIds` and skipped everywhere —
+  `diffMappingRules` never emits the doomed create, and `diffRelationships`/
+  `diffAuthorizations` drop any relationship or authorization entry that
+  references that id — instead of letting the create fail at `apply` time and
+  cascading into further failures for everything that referenced it. Each
+  collision becomes a `ReconciliationPlan.conflicts` entry: unlike
+  `protect.ts`'s `warnings`, these are always shown (never gated behind
+  `--show-protected`) and fail the CLI's exit code, since they need a spec
+  change, not just operator awareness.
 - **`protect.ts`** — **the single audit point** for this tool's hard safety
   guarantee (see below). A pure post-filter over the already-computed action
   list, so it can't be bypassed by any particular shape of spec.

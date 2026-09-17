@@ -317,3 +317,71 @@ describe("buildPlan - authorization full-replace semantics", () => {
     expect(plan.actions).toHaveLength(0);
   });
 });
+
+describe("buildPlan - mapping rule claim conflicts", () => {
+  it("skips creating a mapping rule whose claim already belongs to a different live mappingRuleId, and reports it as a conflict", () => {
+    const spec = Spec.parse({
+      mappingRules: [{ mappingRuleId: "new-id", claimName: "azp", claimValue: "123" }],
+    });
+    const current = currentState({
+      mappingRules: [{ mappingRuleId: "old-id", claimName: "azp", claimValue: "123", name: "old-id" }],
+    });
+    const plan = buildPlan(spec, current, "additive");
+    expect(kinds(plan.actions)).toEqual([]);
+    expect(plan.conflicts).toHaveLength(1);
+    expect(plan.conflicts[0]).toContain("new-id");
+    expect(plan.conflicts[0]).toContain("old-id");
+    expect(plan.conflicts[0]).toContain("azp=123");
+  });
+
+  it("also skips role/group/tenant assignments and authorizations referencing the conflicted mappingRuleId", () => {
+    const spec = Spec.parse({
+      mappingRules: [{ mappingRuleId: "new-id", claimName: "azp", claimValue: "123" }],
+      roles: [{ roleId: "r1", name: "R1", mappingRules: ["new-id"] }],
+      groups: [{ groupId: "g1", name: "G1", mappingRules: ["new-id"] }],
+      tenants: [{ tenantId: "t1", name: "T1", mappingRules: ["new-id"] }],
+      authorizations: [
+        {
+          ownerType: "MAPPING_RULE",
+          ownerId: "new-id",
+          resourceType: "PROCESS_DEFINITION",
+          resourceId: "*",
+          permissions: ["READ"],
+        },
+      ],
+    });
+    const current = currentState({
+      mappingRules: [{ mappingRuleId: "old-id", claimName: "azp", claimValue: "123", name: "old-id" }],
+      roles: [{ roleId: "r1", name: "R1", description: null }],
+      groups: [{ groupId: "g1", name: "G1", description: null }],
+      tenants: [{ tenantId: "t1", name: "T1", description: null }],
+    });
+    const plan = buildPlan(spec, current, "additive");
+    expect(kinds(plan.actions)).toEqual([]);
+    expect(plan.conflicts).toHaveLength(1);
+  });
+
+  it("does not flag a conflict when the spec's mappingRuleId matches the live one for the same claim (update path)", () => {
+    const spec = Spec.parse({
+      mappingRules: [{ mappingRuleId: "m1", claimName: "azp", claimValue: "123", name: "Renamed" }],
+    });
+    const current = currentState({
+      mappingRules: [{ mappingRuleId: "m1", claimName: "azp", claimValue: "123", name: "Old Name" }],
+    });
+    const plan = buildPlan(spec, current, "additive");
+    expect(plan.conflicts).toHaveLength(0);
+    expect(kinds(plan.actions)).toEqual(["update-mapping-rule"]);
+  });
+
+  it("does not flag a conflict for two spec entries with different claims", () => {
+    const spec = Spec.parse({
+      mappingRules: [
+        { mappingRuleId: "m1", claimName: "azp", claimValue: "123" },
+        { mappingRuleId: "m2", claimName: "azp", claimValue: "456" },
+      ],
+    });
+    const plan = buildPlan(spec, currentState({}), "additive");
+    expect(plan.conflicts).toHaveLength(0);
+    expect(kinds(plan.actions).sort()).toEqual(["create-mapping-rule", "create-mapping-rule"]);
+  });
+});

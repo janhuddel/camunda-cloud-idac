@@ -144,6 +144,12 @@ export interface PlannedAction {
 export interface ReconciliationPlan {
   actions: PlannedAction[];
   warnings: string[];
+  // Mapping-rule claim collisions against live cluster state (see
+  // findMappingRuleClaimConflicts in diff.ts) - unlike `warnings`, these aren't
+  // permanent/structural guard-rail noise, they're actionable problems the spec
+  // author needs to fix, so format.ts always shows them, never gated behind
+  // `--show-protected`.
+  conflicts: string[];
 }
 
 export interface ApplyResult {

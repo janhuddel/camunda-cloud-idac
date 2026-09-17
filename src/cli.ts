@@ -81,8 +81,9 @@ program
       const mode: Mode = opts.prune ? "prune" : "additive";
       const plan = buildPlan(spec, current, mode);
       console.log(formatPlan(plan, { showProtected: opts.showProtected }));
-      // Mirrors `terraform plan -detailed-exitcode`: 0 = no drift, 1 = drift found. CI-usable.
-      process.exitCode = plan.actions.length > 0 ? 1 : 0;
+      // Mirrors `terraform plan -detailed-exitcode`: 0 = no drift, 1 = drift found (or
+      // an unresolved mapping-rule claim conflict, which needs a spec change either way).
+      process.exitCode = plan.actions.length > 0 || plan.conflicts.length > 0 ? 1 : 0;
     } catch (err) {
       reportError(err);
       process.exitCode = 1;
@@ -105,6 +106,7 @@ program
       console.log(formatPlan(plan, { showProtected: opts.showProtected }));
 
       if (plan.actions.length === 0) {
+        process.exitCode = plan.conflicts.length > 0 ? 1 : 0;
         return;
       }
 
@@ -137,7 +139,7 @@ program
       }
       console.log("");
       console.log(formatApplyResult(result, { showProtected: opts.showProtected }));
-      process.exitCode = result.failed.length > 0 ? 1 : 0;
+      process.exitCode = result.failed.length > 0 || plan.conflicts.length > 0 ? 1 : 0;
     } catch (err) {
       reportError(err);
       process.exitCode = 1;

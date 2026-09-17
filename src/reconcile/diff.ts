@@ -131,11 +131,69 @@ function diffGroups(spec: Spec, current: CurrentState, mode: Mode, actions: Plan
   }
 }
 
-function diffMappingRules(spec: Spec, current: CurrentState, mode: Mode, actions: PlannedAction[]): void {
+function claimKey(claimName: string, claimValue: string): string {
+  return `${claimName}::${claimValue}`;
+}
+
+/**
+ * Camunda enforces a single mapping rule per (claimName, claimValue) pair
+ * cluster-wide - creating a second one with the same claim under a different
+ * mappingRuleId is rejected by the live API. `diffMappingRules` only ever
+ * matched by id, so a spec declaring a fresh id that happens to reuse a claim
+ * already owned by some other mapping rule (e.g. one created by Camunda 8.8's
+ * built-in boot-time Identity-as-code feature, or left over from an earlier,
+ * differently-keyed run) produced a doomed create-mapping-rule action - which
+ * failed at apply time, and then cascaded into further failures for every
+ * relationship/authorization action that referenced the never-created id.
+ *
+ * This runs against `current` (live cluster state) before diffing, so the
+ * conflict is surfaced as a clear, actionable message at `plan` time instead
+ * of an opaque API error mid-`apply`, and the doomed downstream actions are
+ * never generated in the first place.
+ */
+function findMappingRuleClaimConflicts(
+  spec: Spec,
+  current: CurrentState,
+): { conflictedIds: Set<string>; conflicts: string[] } {
+  const currentIds = new Set(current.mappingRules.map((m) => m.mappingRuleId));
+  const currentIdByClaim = new Map<string, string>();
+  for (const m of current.mappingRules) {
+    currentIdByClaim.set(claimKey(m.claimName, m.claimValue), m.mappingRuleId);
+  }
+
+  const conflictedIds = new Set<string>();
+  const conflicts: string[] = [];
+
+  for (const desired of spec.mappingRules) {
+    if (currentIds.has(desired.mappingRuleId)) continue; // update path, not a create - no conflict possible
+    const existingId = currentIdByClaim.get(claimKey(desired.claimName, desired.claimValue));
+    if (existingId !== undefined && existingId !== desired.mappingRuleId) {
+      conflictedIds.add(desired.mappingRuleId);
+      conflicts.push(
+        `mapping rule "${desired.mappingRuleId}" (claim ${desired.claimName}=${desired.claimValue}) cannot be created: ` +
+          `mapping rule "${existingId}" already uses this exact claim, and Camunda allows only one mapping rule per claim. ` +
+          `Skipped creating "${desired.mappingRuleId}" and any relationship/authorization entries in the spec that reference it. ` +
+          `To resolve: change mappingRuleId "${desired.mappingRuleId}" in your spec to "${existingId}" to adopt the existing rule; ` +
+          `or, if "${existingId}" isn't declared in your spec and you're running with --prune, rerun after this apply prunes it, which frees the claim for "${desired.mappingRuleId}".`,
+      );
+    }
+  }
+
+  return { conflictedIds, conflicts };
+}
+
+function diffMappingRules(
+  spec: Spec,
+  current: CurrentState,
+  mode: Mode,
+  actions: PlannedAction[],
+  conflictedIds: Set<string>,
+): void {
   const curById = new Map(current.mappingRules.map((m) => [m.mappingRuleId, m]));
   const desiredIds = new Set(spec.mappingRules.map((m) => m.mappingRuleId));
 
   for (const desired of spec.mappingRules) {
+    if (conflictedIds.has(desired.mappingRuleId)) continue;
     // The SDK requires `name` on create/update; the YAML schema leaves it optional
     // (matching the example spec, which omits it) - fall back to the mapping rule's
     // own id so a name-less spec entry still round-trips.
@@ -215,14 +273,23 @@ function diffRelationship(
   }
 }
 
-function diffRelationships(spec: Spec, current: CurrentState, mode: Mode, actions: PlannedAction[]): void {
+function diffRelationships(
+  spec: Spec,
+  current: CurrentState,
+  mode: Mode,
+  actions: PlannedAction[],
+  conflictedIds: Set<string>,
+): void {
   const roleGroupDesired = new Set<string>();
   const roleMappingRuleDesired = new Set<string>();
   const roleUserDesired = new Set<string>();
   const roleClientDesired = new Set<string>();
   for (const role of spec.roles) {
     for (const groupId of role.groups) roleGroupDesired.add(`${role.roleId}::${groupId}`);
-    for (const mappingRuleId of role.mappingRules) roleMappingRuleDesired.add(`${role.roleId}::${mappingRuleId}`);
+    for (const mappingRuleId of role.mappingRules) {
+      if (conflictedIds.has(mappingRuleId)) continue;
+      roleMappingRuleDesired.add(`${role.roleId}::${mappingRuleId}`);
+    }
     for (const username of role.users) roleUserDesired.add(`${role.roleId}::${username}`);
     for (const clientId of role.clients) roleClientDesired.add(`${role.roleId}::${clientId}`);
   }
@@ -231,7 +298,10 @@ function diffRelationships(spec: Spec, current: CurrentState, mode: Mode, action
   const groupUserDesired = new Set<string>();
   const groupClientDesired = new Set<string>();
   for (const group of spec.groups) {
-    for (const mappingRuleId of group.mappingRules) groupMappingRuleDesired.add(`${group.groupId}::${mappingRuleId}`);
+    for (const mappingRuleId of group.mappingRules) {
+      if (conflictedIds.has(mappingRuleId)) continue;
+      groupMappingRuleDesired.add(`${group.groupId}::${mappingRuleId}`);
+    }
     for (const username of group.users) groupUserDesired.add(`${group.groupId}::${username}`);
     for (const clientId of group.clients) groupClientDesired.add(`${group.groupId}::${clientId}`);
   }
@@ -242,7 +312,10 @@ function diffRelationships(spec: Spec, current: CurrentState, mode: Mode, action
   for (const tenant of spec.tenants) {
     for (const roleId of tenant.roles) tenantRoleDesired.add(`${tenant.tenantId}::${roleId}`);
     for (const groupId of tenant.groups) tenantGroupDesired.add(`${tenant.tenantId}::${groupId}`);
-    for (const mappingRuleId of tenant.mappingRules) tenantMappingRuleDesired.add(`${tenant.tenantId}::${mappingRuleId}`);
+    for (const mappingRuleId of tenant.mappingRules) {
+      if (conflictedIds.has(mappingRuleId)) continue;
+      tenantMappingRuleDesired.add(`${tenant.tenantId}::${mappingRuleId}`);
+    }
   }
 
   diffRelationship(
@@ -376,11 +449,23 @@ function samePermissionSet(a: string[], b: string[]): boolean {
   return a.length === b.length && new Set(a).size === new Set([...a, ...b]).size;
 }
 
-function diffAuthorizations(spec: Spec, current: CurrentState, mode: Mode, actions: PlannedAction[]): void {
+function diffAuthorizations(
+  spec: Spec,
+  current: CurrentState,
+  mode: Mode,
+  actions: PlannedAction[],
+  conflictedIds: Set<string>,
+): void {
   const curByTuple = new Map(current.authorizations.map((a) => [authTupleKey(a), a]));
   const desiredTuples = new Set<string>();
 
   for (const desired of spec.authorizations) {
+    if (
+      (desired.ownerType === "MAPPING_RULE" && conflictedIds.has(desired.ownerId)) ||
+      (desired.resourceType === "MAPPING_RULE" && conflictedIds.has(desired.resourceId))
+    ) {
+      continue;
+    }
     const key = authTupleKey(desired);
     desiredTuples.add(key);
     const tuple: AuthorizationTuple = {
@@ -435,13 +520,15 @@ function diffAuthorizations(spec: Spec, current: CurrentState, mode: Mode, actio
 export function buildPlan(spec: Spec, current: CurrentState, mode: Mode): ReconciliationPlan {
   const actions: PlannedAction[] = [];
 
+  const { conflictedIds, conflicts } = findMappingRuleClaimConflicts(spec, current);
+
   diffTenants(spec, current, mode, actions);
   diffRoles(spec, current, mode, actions);
   diffGroups(spec, current, mode, actions);
-  diffMappingRules(spec, current, mode, actions);
-  diffRelationships(spec, current, mode, actions);
-  diffAuthorizations(spec, current, mode, actions);
+  diffMappingRules(spec, current, mode, actions, conflictedIds);
+  diffRelationships(spec, current, mode, actions, conflictedIds);
+  diffAuthorizations(spec, current, mode, actions, conflictedIds);
 
   const { actions: protectedActions, warnings } = applyProtections(actions);
-  return { actions: sortActions(protectedActions), warnings };
+  return { actions: sortActions(protectedActions), warnings, conflicts };
 }
