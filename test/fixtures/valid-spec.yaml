@@ -1,0 +1,32 @@
+tenants:
+  - tenantId: default
+    name: Default Tenant
+    roles: [process-owner]
+    groups: [ops-team]
+
+roles:
+  - roleId: process-owner
+    name: Process Owner
+    description: Vollzugriff auf Prozessdefinitionen
+    mappingRules: [m-process-owner]
+    groups: [ops-team]
+
+groups:
+  - groupId: ops-team
+    name: Ops Team
+    mappingRules: [m-ops]
+
+mappingRules:
+  - mappingRuleId: m-process-owner
+    claimName: groups
+    claimValue: process-owners
+  - mappingRuleId: m-ops
+    claimName: groups
+    claimValue: ops
+
+authorizations:
+  - ownerType: ROLE
+    ownerId: process-owner
+    resourceType: PROCESS_DEFINITION
+    resourceId: "*"
+    permissions: [CREATE, READ, UPDATE_PROCESS_INSTANCE]

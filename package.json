@@ -1,0 +1,30 @@
+{
+  "name": "camunda-cloud-idac",
+  "version": "0.1.0",
+  "description": "Identity-as-code reconciler for Camunda 8 (tenants, roles, groups, mapping rules, authorizations)",
+  "type": "module",
+  "bin": {
+    "camunda-idac": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@camunda8/orchestration-cluster-api": "9.1.5",
+    "commander": "^12.1.0",
+    "yaml": "^2.6.1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20.6.0"
+  }
+}
