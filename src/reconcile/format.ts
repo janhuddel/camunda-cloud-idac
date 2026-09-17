@@ -1,4 +1,5 @@
-import type { ActionKind, ApplyResult, ReconciliationPlan } from "./types.js";
+import { cyan, dim, green, red, yellow } from "../colors.js";
+import type { ActionKind, PlannedAction, ApplyResult, ReconciliationPlan } from "./types.js";
 
 function symbolFor(kind: ActionKind): string {
   if (kind.startsWith("create-")) return "+";
@@ -7,6 +8,18 @@ function symbolFor(kind: ActionKind): string {
   if (kind.startsWith("unassign-")) return "<-";
   if (kind.startsWith("assign-")) return "->";
   return "?";
+}
+
+/** Destructive actions (deletes and unassigns) are red regardless of exact
+ * kind - that's the one distinction operators scanning a plan most need to
+ * catch at a glance. Non-destructive kinds get a lighter, purely cosmetic
+ * hint (create/update/assign). */
+function colorFor(action: PlannedAction): (text: string) => string {
+  if (action.destructive) return red;
+  if (action.kind.startsWith("create-")) return green;
+  if (action.kind.startsWith("update-")) return yellow;
+  if (action.kind.startsWith("assign-")) return cyan;
+  return (text: string) => text;
 }
 
 /** Shared renderer used by both `plan` and the pre-confirmation display in `apply`,
@@ -24,7 +37,7 @@ export function formatPlan(plan: ReconciliationPlan, opts: { showProtected?: boo
     lines.push("No changes - cluster state already matches the spec.");
   } else {
     for (const action of plan.actions) {
-      lines.push(`  ${symbolFor(action.kind)} ${action.description}`);
+      lines.push(colorFor(action)(`  ${symbolFor(action.kind)} ${action.description}`));
     }
     lines.push("");
     lines.push(`${plan.actions.length} action(s) planned.`);
@@ -33,7 +46,7 @@ export function formatPlan(plan: ReconciliationPlan, opts: { showProtected?: boo
   if (opts.showProtected && plan.warnings.length > 0) {
     lines.push("");
     lines.push("Protected (left untouched):");
-    for (const warning of plan.warnings) lines.push(`  ! ${warning}`);
+    for (const warning of plan.warnings) lines.push(dim(`  ! ${warning}`));
   }
 
   return lines.join("\n");
@@ -56,14 +69,14 @@ export function formatApplyResult(result: ApplyResult, opts: { showProtected?: b
     lines.push("");
     lines.push("Failures:");
     for (const { action, error } of result.failed) {
-      lines.push(`  x ${action.description}: ${errorMessage(error)}`);
+      lines.push(red(`  x ${action.description}: ${errorMessage(error)}`));
     }
   }
 
   if (opts.showProtected && result.skippedProtected.length > 0) {
     lines.push("");
     lines.push("Protected (left untouched):");
-    for (const warning of result.skippedProtected) lines.push(`  ! ${warning}`);
+    for (const warning of result.skippedProtected) lines.push(dim(`  ! ${warning}`));
   }
 
   return lines.join("\n");
