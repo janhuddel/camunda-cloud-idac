@@ -1,25 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { parse as parseYaml, YAMLParseError } from "yaml";
-import type { ZodError } from "zod";
 import { Spec } from "./schema.js";
 import type { Spec as SpecType } from "./schema.js";
+import { composeSpec, EnvironmentFile, isEnvironmentFile } from "./compose.js";
+import { formatZodError, SpecValidationError } from "./errors.js";
 
-export class SpecValidationError extends Error {
-  constructor(
-    public readonly filePath: string,
-    public readonly issues: string[],
-  ) {
-    super(`Invalid spec at ${filePath}:\n${issues.map((i) => `  - ${i}`).join("\n")}`);
-    this.name = "SpecValidationError";
-  }
-}
-
-function formatZodError(error: ZodError): string[] {
-  return error.issues.map((issue) => {
-    const path = issue.path.join(".");
-    return path ? `${path}: ${issue.message}` : issue.message;
-  });
-}
+export { SpecValidationError } from "./errors.js";
 
 export async function loadSpec(filePath: string): Promise<SpecType> {
   let raw: string;
@@ -41,7 +27,16 @@ export async function loadSpec(filePath: string): Promise<SpecType> {
     throw err;
   }
 
-  const result = Spec.safeParse(parsed);
+  let assembled: unknown = parsed;
+  if (isEnvironmentFile(parsed)) {
+    const envResult = EnvironmentFile.safeParse(parsed);
+    if (!envResult.success) {
+      throw new SpecValidationError(filePath, formatZodError(envResult.error));
+    }
+    assembled = await composeSpec(filePath, envResult.data);
+  }
+
+  const result = Spec.safeParse(assembled);
   if (!result.success) {
     throw new SpecValidationError(filePath, formatZodError(result.error));
   }

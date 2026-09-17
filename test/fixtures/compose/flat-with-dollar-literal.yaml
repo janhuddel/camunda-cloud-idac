@@ -1,0 +1,14 @@
+tenants:
+  - tenantId: default
+    name: Default
+    groups: [ops]
+
+groups:
+  - groupId: ops
+    name: Ops
+    mappingRules: [m-ops]
+
+mappingRules:
+  - mappingRuleId: m-ops
+    claimName: groups
+    claimValue: "literal-${FOO}-value"

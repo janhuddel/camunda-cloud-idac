@@ -1,0 +1,4 @@
+include:
+  - fragment-with-include.yaml
+
+values: {}

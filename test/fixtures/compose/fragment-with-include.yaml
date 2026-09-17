@@ -1,0 +1,6 @@
+include:
+  - base.yaml
+
+tenants:
+  - tenantId: nested
+    name: Nested

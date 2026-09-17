@@ -1,0 +1,8 @@
+include:
+  - base.yaml
+  - procapps/leistung.yaml
+  - procapps/workflow.yaml
+
+values:
+  ENV_SUFFIX: E0
+  KUMUL_CLIENT_ID: kumul

@@ -1,0 +1,7 @@
+groups:
+  - groupId: group-leistung
+    name: Gruppe Leistung
+
+roles:
+  - roleId: process-owner
+    groups: [group-leistung]

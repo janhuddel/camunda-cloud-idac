@@ -1,0 +1,24 @@
+mappingRules:
+  - mappingRuleId: map-group-workflow
+    claimName: groups
+    claimValue: AAD-Camunda-Workflow-${ENV_SUFFIX}
+  - mappingRuleId: map-client-pspref
+    claimName: azp
+    claimValue: ${PSPREF_CLIENT_ID}
+
+groups:
+  - groupId: group-workflow
+    name: Gruppe Workflow
+    mappingRules: [map-group-workflow]
+
+tenants:
+  - tenantId: workflow
+    name: Tenant Workflow
+    groups: [group-workflow]
+    mappingRules: [map-client-pspref]
+
+roles:
+  - roleId: process-owner
+    groups: [group-workflow]
+  - roleId: process-application
+    mappingRules: [map-client-pspref]

@@ -1,0 +1,6 @@
+include:
+  - base.yaml
+  - ./base.yaml
+
+values:
+  ENV_SUFFIX: E0

@@ -1,0 +1,22 @@
+mappingRules:
+  - mappingRuleId: map-group-rueckversicherung
+    claimName: groups
+    claimValue: AAD-Camunda-Rueckversicherung-${ENV_SUFFIX}
+  - mappingRuleId: map-client-kumul
+    claimName: azp
+    claimValue: ${KUMUL_CLIENT_ID}
+
+groups:
+  - groupId: group-rueckversicherung
+    name: Gruppe Rueckversicherung
+    mappingRules: [map-group-rueckversicherung]
+
+tenants:
+  - tenantId: rueckversicherung
+    name: Tenant Rueckversicherung
+    groups: [group-rueckversicherung]
+    mappingRules: [map-client-kumul]
+
+roles:
+  - roleId: process-owner
+    groups: [group-rueckversicherung]

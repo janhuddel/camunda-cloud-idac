@@ -69,7 +69,34 @@ detection (rule 7), and rejects two authorization entries for the same
 owner/resource tuple with different permission sets (rule 8).
 
 `load.ts` reads the YAML file, parses it, and wraps any YAML or Zod failure in
-`SpecValidationError` with per-issue messages.
+`SpecValidationError` with per-issue messages. `SpecValidationError`/`formatZodError`
+live in `errors.ts` (extracted out of `load.ts`) so `compose.ts` can reuse them
+without a circular import; `load.ts` re-exports `SpecValidationError` so nothing
+outside `src/spec/` needs to know about the split.
+
+Before the final `Spec.safeParse()`, `load.ts` checks whether the parsed YAML has a
+top-level `include` key — `RawSpec` is `.strict()` with no such field, so this can
+never collide with a real flat spec. If present, `compose.ts`'s `composeSpec()`
+handles a second, optional pipeline stage: an **environment file**
+(`{ include: string[], values?: Record<string,string> }`) names a flat list of
+fragment YAML files (resolved relative to the environment file's own directory,
+exactly one level deep — a fragment with its own `include` is rejected) and a
+`${VAR}` substitution map applied to each fragment's raw text before it's parsed
+(unresolved placeholders after substitution are a hard error, never passed through
+as a literal). Fragments are parsed against a looser per-entity schema where only
+the ID field is required; `mergeEntitiesById()` then merges same-ID entities across
+fragments by **unioning array fields** (`groups`/`mappingRules`/`users`/`clients`/
+`roles`, deduped) and **rejecting conflicting scalar fields** (`name`/`description`/
+`claimName`/`claimValue`) — this is what lets a role like `process-owner` span every
+procapp without any one fragment knowing about the others, while still being one
+logical owner making one non-contradictory declaration (consistent with the
+"container is authoritative" principle above — merging is just that one owner's
+declaration arriving in pieces, never a second entity asserting a competing
+relationship). `authorizations` have no ID field and are concatenated as-is, relying
+on the existing rule 8 to catch genuine conflicts. Only the fully merged result is
+handed to the same, unmodified `Spec.safeParse()` used for flat specs — `schema.ts`
+itself has zero awareness of composition. See the README's "Environment files"
+section and `test/fixtures/compose/` for the full contract and a worked example.
 
 ### Reading cluster state (`src/camunda/`)
 

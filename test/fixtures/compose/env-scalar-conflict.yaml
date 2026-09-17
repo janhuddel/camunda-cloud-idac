@@ -1,0 +1,7 @@
+include:
+  - base.yaml
+  - procapps/leistung.yaml
+  - conflicting-name.yaml
+
+values:
+  ENV_SUFFIX: E0

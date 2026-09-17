@@ -1,0 +1,7 @@
+include:
+  - base.yaml
+  - dup-a.yaml
+  - dup-b.yaml
+
+values:
+  ENV_SUFFIX: E0

@@ -1,0 +1,18 @@
+mappingRules:
+  - mappingRuleId: map-group-admin
+    claimName: groups
+    claimValue: AAD-Camunda-Admin-${ENV_SUFFIX}
+
+groups:
+  - groupId: group-admin
+    name: Gruppe Admin
+    mappingRules: [map-group-admin]
+
+roles:
+  - roleId: admin
+    name: Admin
+    groups: [group-admin]
+  - roleId: process-owner
+    name: Prozess Eigentuemer
+  - roleId: process-application
+    name: Prozess Anwendung

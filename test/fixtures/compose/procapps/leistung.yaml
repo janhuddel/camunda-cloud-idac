@@ -1,0 +1,18 @@
+mappingRules:
+  - mappingRuleId: map-group-leistung
+    claimName: groups
+    claimValue: AAD-Camunda-Leistung-${ENV_SUFFIX}
+
+groups:
+  - groupId: group-leistung
+    name: Gruppe Leistung
+    mappingRules: [map-group-leistung]
+
+tenants:
+  - tenantId: leistung
+    name: Tenant Leistung
+    groups: [group-leistung]
+
+roles:
+  - roleId: process-owner
+    groups: [group-leistung]

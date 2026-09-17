@@ -90,6 +90,83 @@ some principals are granted access by username/client ID rather than by an
 IdP group claim. These aren't declared entities elsewhere in the spec, so
 there's no referential-integrity check on them (any string is accepted).
 
+## Environment files
+
+The single `<spec>` argument to `validate`/`plan`/`apply` can be either a
+flat spec (above) or an **environment file** that composes several spec
+fragments into one, for organizations that run the same identity model
+across multiple environments/clusters with per-cluster differences:
+
+```yaml
+# specs/e0.yaml
+include:
+  - base.yaml
+  - procapps/leistung.yaml
+  - procapps/workflow.yaml
+  # a procapp fragment can be left out here if this cluster doesn't need it
+
+values:
+  ENV_SUFFIX: E0
+  KUMUL_CLIENT_ID: kumul
+```
+
+A file is treated as an environment file purely because it has a top-level
+`include` key (flat specs never do, since `RawSpec` is `.strict()` and has
+no such field, so detection can't collide with the existing format).
+`include` paths resolve relative to the environment file's own directory.
+See `test/fixtures/compose/` for a complete worked example (base + 3
+procapp fragments + a full and a partial environment file).
+
+**Fragments** are plain YAML files shaped like a spec, but looser: only
+each entity's ID field (`tenantId`/`roleId`/`groupId`/`mappingRuleId`) is
+required - every other field is optional, since one fragment may only be
+contributing a *piece* of an entity that another fragment (or a shared
+`base.yaml`) already declares in full. This is what lets a role like
+`process-owner` span every procapp without every procapp fragment knowing
+about the others: `base.yaml` declares `process-owner`'s `name`, and each
+`procapps/<name>.yaml` fragment separately contributes its own group to
+`process-owner.groups`.
+
+When multiple fragments mention the same entity ID:
+
+- **Array fields** (`groups`, `mappingRules`, `users`, `clients`, `roles`)
+  are **unioned** (deduplicated, first-seen order).
+- **Scalar fields** (`name`, `description`, `claimName`, `claimValue`) must
+  not disagree - two fragments giving the same ID a different value for the
+  same scalar field is a composition error naming both files and values.
+- `authorizations` have no ID field and are simply concatenated; the
+  existing schema already tolerates exact duplicate authorization tuples
+  and flags genuine permission conflicts, so no special merging is needed.
+
+Only the fully merged, ID-deduplicated result is validated against the same
+unmodified `Spec` schema used for flat specs - so every existing guarantee
+(referential integrity, no duplicate IDs, authorization-tuple conflicts)
+still applies to the assembled spec exactly as it does today. If no
+fragment ever provides a required field (e.g. `name`), that surfaces as the
+same "Required" error you'd get from an incomplete flat spec.
+
+`include` is exactly one level deep - a fragment listed under `include` may
+not itself have a top-level `include` key (nested composition isn't
+supported, and produces a clear error if attempted).
+
+**`${VAR}` substitution**: each fragment's raw text is scanned for
+`${NAME}` placeholders before it's parsed as YAML, substituted from the
+environment file's `values` map. Any placeholder left unresolved after
+substitution (a typo, or a `values` map missing an entry) is a hard error
+naming the fragment file and the unresolved name(s) - it never silently
+passes through as a literal string. A flat spec (no `include` key) is never
+scanned for placeholders, so a literal `${...}`-looking value in a flat
+spec is passed through untouched.
+
+**Prune caveat**: omitting a procapp fragment from an environment's
+`include` is, to the reconciler, indistinguishable from "this was
+intentionally removed." If that procapp's tenant/group/mapping rules still
+exist on the target cluster (e.g. it was deployed there before, or under a
+different environment file), a later `apply --prune` run against that
+cluster will delete them - same as removing any other entity from a flat
+spec. Make sure `include` lists match what should actually exist on each
+cluster before pruning.
+
 ## Known limitations
 
 - Direct **tenant**-to-user/client assignments aren't modeled by the spec
