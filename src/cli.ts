@@ -6,6 +6,7 @@ import { fetchCurrentState } from "./camunda/list-all.js";
 import { buildPlan, type Mode } from "./reconcile/diff.js";
 import { applyPlan } from "./reconcile/apply.js";
 import { formatApplyResult, formatPlan } from "./reconcile/format.js";
+import { createProgressReporter } from "./progress.js";
 
 // Load ./.env into process.env (if present) so CAMUNDA_* vars work without the
 // operator having to `export` each line by hand. Silently ignored when there's
@@ -28,6 +29,25 @@ function reportError(err: unknown): void {
     console.error(
       "Hint: check that CAMUNDA_REST_ADDRESS/CAMUNDA_OAUTH_URL/CAMUNDA_CLIENT_ID/CAMUNDA_CLIENT_SECRET are set (via .env or the environment) and reachable.",
     );
+  }
+}
+
+async function fetchCurrentStateWithProgress(): ReturnType<typeof fetchCurrentState> {
+  const progress = createProgressReporter();
+  try {
+    const current = await fetchCurrentState((e) => {
+      progress.update(
+        e.phase === "entities"
+          ? `Fetching entities… (${e.completed}/${e.total})`
+          : `Resolving relationships… (${e.completed}/${e.total})`,
+      );
+    });
+    progress.stop(
+      `Fetched current cluster state: ${current.tenants.length} tenants, ${current.roles.length} roles, ${current.groups.length} groups, ${current.mappingRules.length} mapping rules, ${current.authorizations.length} authorizations.`,
+    );
+    return current;
+  } finally {
+    progress.stop();
   }
 }
 
@@ -57,7 +77,7 @@ program
   .action(async (specPath: string, opts: { prune: boolean; showProtected: boolean }) => {
     try {
       const spec = await loadSpec(specPath);
-      const current = await fetchCurrentState();
+      const current = await fetchCurrentStateWithProgress();
       const mode: Mode = opts.prune ? "prune" : "additive";
       const plan = buildPlan(spec, current, mode);
       console.log(formatPlan(plan, { showProtected: opts.showProtected }));
@@ -79,7 +99,7 @@ program
   .action(async (specPath: string, opts: { prune: boolean; yes: boolean; showProtected: boolean }) => {
     try {
       const spec = await loadSpec(specPath);
-      const current = await fetchCurrentState();
+      const current = await fetchCurrentStateWithProgress();
       const mode: Mode = opts.prune ? "prune" : "additive";
       const plan = buildPlan(spec, current, mode);
       console.log(formatPlan(plan, { showProtected: opts.showProtected }));
@@ -104,7 +124,17 @@ program
         }
       }
 
-      const result = await applyPlan(plan);
+      const applyProgress = createProgressReporter();
+      let result;
+      try {
+        result = await applyPlan(plan, (e) => {
+          if (e.type === "start") {
+            applyProgress.update(`[${e.index + 1}/${e.total}] ${e.action.description}`);
+          }
+        });
+      } finally {
+        applyProgress.stop();
+      }
       console.log("");
       console.log(formatApplyResult(result, { showProtected: opts.showProtected }));
       process.exitCode = result.failed.length > 0 ? 1 : 0;

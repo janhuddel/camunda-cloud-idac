@@ -71,6 +71,7 @@ async function fetchRelationships(
   roles: RoleEntity[],
   groups: GroupEntity[],
   tenants: TenantEntity[],
+  onProgress?: (completed: number, total: number) => void,
 ): Promise<RelationshipState> {
   const roleGroup = new Set<string>();
   const roleMappingRule = new Set<string>();
@@ -82,6 +83,10 @@ async function fetchRelationships(
   const roleUser = new Set<string>();
   const roleClient = new Set<string>();
   const tenantMappingRule = new Set<string>();
+
+  const total = roles.length + groups.length + tenants.length;
+  let completed = 0;
+  const tick = () => onProgress?.(++completed, total);
 
   await Promise.all([
     ...roles.map(async (role) => {
@@ -95,6 +100,7 @@ async function fetchRelationships(
       for (const m of mappingRulesForRole) roleMappingRule.add(`${role.roleId}::${m.mappingRuleId}`);
       for (const u of usersForRole) roleUser.add(`${role.roleId}::${u.username}`);
       for (const c of clientsForRole) roleClient.add(`${role.roleId}::${c.clientId}`);
+      tick();
     }),
     ...groups.map(async (group) => {
       const [mappingRulesForGroup, usersForGroup, clientsForGroup] = await Promise.all([
@@ -105,6 +111,7 @@ async function fetchRelationships(
       for (const m of mappingRulesForGroup) groupMappingRule.add(`${group.groupId}::${m.mappingRuleId}`);
       for (const u of usersForGroup) groupUser.add(`${group.groupId}::${u.username}`);
       for (const c of clientsForGroup) groupClient.add(`${group.groupId}::${c.clientId}`);
+      tick();
     }),
     ...tenants.map(async (tenant) => {
       const [rolesForTenant, groupIdsForTenant, mappingRulesForTenant] = await Promise.all([
@@ -115,6 +122,7 @@ async function fetchRelationships(
       for (const r of rolesForTenant) tenantRole.add(`${tenant.tenantId}::${r.roleId}`);
       for (const g of groupIdsForTenant) tenantGroup.add(`${tenant.tenantId}::${g.groupId}`);
       for (const m of mappingRulesForTenant) tenantMappingRule.add(`${tenant.tenantId}::${m.mappingRuleId}`);
+      tick();
     }),
   ]);
 
@@ -132,6 +140,13 @@ async function fetchRelationships(
   };
 }
 
+/** Reported by `fetchCurrentState` as it progresses through its two fetch phases. */
+export interface FetchProgressEvent {
+  phase: "entities" | "relationships";
+  completed: number;
+  total: number;
+}
+
 /**
  * Fetches the complete current cluster state in one pass: every tenant, role,
  * group, mapping rule and authorization, plus every relationship pair between
@@ -140,15 +155,40 @@ async function fetchRelationships(
  * in prune mode: an entity about to be pruned still has its stale links surfaced
  * here, so diff.ts can schedule the unassign/delete-authorization actions that
  * must run before the entity itself is deleted.
+ *
+ * `onProgress`, if given, is called as each of the two fetch phases (entity
+ * lists, then per-entity relationship lookups) makes progress - purely for
+ * caller-side UX (e.g. a CLI progress indicator); this function itself never
+ * renders anything.
  */
-export async function fetchCurrentState(): Promise<CurrentState> {
+export async function fetchCurrentState(onProgress?: (event: FetchProgressEvent) => void): Promise<CurrentState> {
+  let entitiesCompleted = 0;
+  const entityTick = () => onProgress?.({ phase: "entities", completed: ++entitiesCompleted, total: 5 });
+
   const [tenants, roles, groups, mappingRules, authorizations] = await Promise.all([
-    listAllTenants(),
-    listAllRoles(),
-    listAllGroups(),
-    listAllMappingRules(),
-    listAllAuthorizations(),
+    listAllTenants().then((r) => {
+      entityTick();
+      return r;
+    }),
+    listAllRoles().then((r) => {
+      entityTick();
+      return r;
+    }),
+    listAllGroups().then((r) => {
+      entityTick();
+      return r;
+    }),
+    listAllMappingRules().then((r) => {
+      entityTick();
+      return r;
+    }),
+    listAllAuthorizations().then((r) => {
+      entityTick();
+      return r;
+    }),
   ]);
-  const relationships = await fetchRelationships(roles, groups, tenants);
+  const relationships = await fetchRelationships(roles, groups, tenants, (completed, total) =>
+    onProgress?.({ phase: "relationships", completed, total }),
+  );
   return { tenants, roles, groups, mappingRules, authorizations, relationships };
 }
