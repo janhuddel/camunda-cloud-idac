@@ -67,11 +67,19 @@ export async function listAllAuthorizations(): Promise<AuthorizationEntity[]> {
     }));
 }
 
+/** One relationship-fetch task (all calls for a single role/group/tenant) finished. */
+export interface RelationshipProgressEvent {
+  completed: number;
+  total: number;
+  label: string;
+  durationMs: number;
+}
+
 async function fetchRelationships(
   roles: RoleEntity[],
   groups: GroupEntity[],
   tenants: TenantEntity[],
-  onProgress?: (completed: number, total: number) => void,
+  onProgress?: (event: RelationshipProgressEvent) => void,
 ): Promise<RelationshipState> {
   const roleGroup = new Set<string>();
   const roleMappingRule = new Set<string>();
@@ -86,10 +94,11 @@ async function fetchRelationships(
 
   const total = roles.length + groups.length + tenants.length;
   let completed = 0;
-  const tick = () => onProgress?.(++completed, total);
+  const tick = (label: string, durationMs: number) => onProgress?.({ completed: ++completed, total, label, durationMs });
 
   await Promise.all([
     ...roles.map(async (role) => {
+      const startedAt = Date.now();
       const [groupsForRole, mappingRulesForRole, usersForRole, clientsForRole] = await Promise.all([
         paginateAll((page) => client().searchGroupsForRole({ roleId: role.roleId, page }, NO_WAIT)),
         paginateAll((page) => client().searchMappingRulesForRole({ roleId: role.roleId, page }, NO_WAIT)),
@@ -100,9 +109,10 @@ async function fetchRelationships(
       for (const m of mappingRulesForRole) roleMappingRule.add(`${role.roleId}::${m.mappingRuleId}`);
       for (const u of usersForRole) roleUser.add(`${role.roleId}::${u.username}`);
       for (const c of clientsForRole) roleClient.add(`${role.roleId}::${c.clientId}`);
-      tick();
+      tick(`role "${role.name}"`, Date.now() - startedAt);
     }),
     ...groups.map(async (group) => {
+      const startedAt = Date.now();
       const [mappingRulesForGroup, usersForGroup, clientsForGroup] = await Promise.all([
         paginateAll((page) => client().searchMappingRulesForGroup({ groupId: group.groupId, page }, NO_WAIT)),
         paginateAll((page) => client().searchUsersForGroup({ groupId: group.groupId, page }, NO_WAIT)),
@@ -111,9 +121,10 @@ async function fetchRelationships(
       for (const m of mappingRulesForGroup) groupMappingRule.add(`${group.groupId}::${m.mappingRuleId}`);
       for (const u of usersForGroup) groupUser.add(`${group.groupId}::${u.username}`);
       for (const c of clientsForGroup) groupClient.add(`${group.groupId}::${c.clientId}`);
-      tick();
+      tick(`group "${group.name}"`, Date.now() - startedAt);
     }),
     ...tenants.map(async (tenant) => {
+      const startedAt = Date.now();
       const [rolesForTenant, groupIdsForTenant, mappingRulesForTenant] = await Promise.all([
         paginateAll((page) => client().searchRolesForTenant({ tenantId: tenant.tenantId, page }, NO_WAIT)),
         paginateAll((page) => client().searchGroupIdsForTenant({ tenantId: tenant.tenantId, page }, NO_WAIT)),
@@ -122,7 +133,7 @@ async function fetchRelationships(
       for (const r of rolesForTenant) tenantRole.add(`${tenant.tenantId}::${r.roleId}`);
       for (const g of groupIdsForTenant) tenantGroup.add(`${tenant.tenantId}::${g.groupId}`);
       for (const m of mappingRulesForTenant) tenantMappingRule.add(`${tenant.tenantId}::${m.mappingRuleId}`);
-      tick();
+      tick(`tenant "${tenant.name}"`, Date.now() - startedAt);
     }),
   ]);
 
@@ -140,11 +151,16 @@ async function fetchRelationships(
   };
 }
 
-/** Reported by `fetchCurrentState` as it progresses through its two fetch phases. */
+/** Reported by `fetchCurrentState` as it progresses through its two fetch phases.
+ * `label` names what just finished (an entity-list name, or `role "x"` /
+ * `group "x"` / `tenant "x"`); `durationMs` is how long that one item took -
+ * both exist purely so a caller can surface which specific calls are slow. */
 export interface FetchProgressEvent {
   phase: "entities" | "relationships";
   completed: number;
   total: number;
+  label: string;
+  durationMs: number;
 }
 
 /**
@@ -163,32 +179,25 @@ export interface FetchProgressEvent {
  */
 export async function fetchCurrentState(onProgress?: (event: FetchProgressEvent) => void): Promise<CurrentState> {
   let entitiesCompleted = 0;
-  const entityTick = () => onProgress?.({ phase: "entities", completed: ++entitiesCompleted, total: 5 });
+  const entityTick = (label: string, durationMs: number) =>
+    onProgress?.({ phase: "entities", completed: ++entitiesCompleted, total: 5, label, durationMs });
+  const timed = <T>(promise: Promise<T>, label: string): Promise<T> => {
+    const startedAt = Date.now();
+    return promise.then((result) => {
+      entityTick(label, Date.now() - startedAt);
+      return result;
+    });
+  };
 
   const [tenants, roles, groups, mappingRules, authorizations] = await Promise.all([
-    listAllTenants().then((r) => {
-      entityTick();
-      return r;
-    }),
-    listAllRoles().then((r) => {
-      entityTick();
-      return r;
-    }),
-    listAllGroups().then((r) => {
-      entityTick();
-      return r;
-    }),
-    listAllMappingRules().then((r) => {
-      entityTick();
-      return r;
-    }),
-    listAllAuthorizations().then((r) => {
-      entityTick();
-      return r;
-    }),
+    timed(listAllTenants(), "tenants"),
+    timed(listAllRoles(), "roles"),
+    timed(listAllGroups(), "groups"),
+    timed(listAllMappingRules(), "mapping rules"),
+    timed(listAllAuthorizations(), "authorizations"),
   ]);
-  const relationships = await fetchRelationships(roles, groups, tenants, (completed, total) =>
-    onProgress?.({ phase: "relationships", completed, total }),
+  const relationships = await fetchRelationships(roles, groups, tenants, (e) =>
+    onProgress?.({ phase: "relationships", ...e }),
   );
   return { tenants, roles, groups, mappingRules, authorizations, relationships };
 }
