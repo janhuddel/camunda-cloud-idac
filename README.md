@@ -51,6 +51,7 @@ npm install -g camunda-cloud-idac
 
 camunda-idac validate spec.yaml
 camunda-idac ping                       # check cluster connectivity - no spec needed
+camunda-idac export > spec.yaml         # snapshot the live cluster as a spec YAML - reverse of render, no spec needed
 camunda-idac plan spec.yaml [--prune]
 camunda-idac apply spec.yaml [--prune] [--yes] [--no-audit-log]
 camunda-idac drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
@@ -64,6 +65,24 @@ cci plan spec.yaml
 deletes. `apply` without `--yes` prints the plan and asks for interactive
 confirmation; it refuses to run without `--yes` on a non-interactive shell
 (CI), so a pipeline can never silently confirm a destructive prune.
+
+## export
+
+```sh
+camunda-idac export > spec.yaml
+```
+
+Reads the live cluster's current state and prints it as a spec YAML to
+stdout - the reverse of `render` (which resolves a spec *file* to YAML;
+`export` resolves the live *cluster* to YAML instead). Useful to bootstrap a
+spec from a cluster that was set up by hand or by Camunda 8.8's built-in
+boot-time Identity-as-code feature, instead of writing one from scratch.
+
+Read-only: no confirmation prompt, no audit-log entry (the audit log only
+records `apply` mutations). There's no `--output` flag - redirect it
+yourself (`camunda-idac export > spec.yaml`). Piping the result through
+`validate`/`plan` is a good sanity check that the round trip produced a
+valid, zero-drift spec.
 
 ## drop-all
 
@@ -111,6 +130,7 @@ cp .env.example .env   # fill in CAMUNDA_* connection details, then export them
 npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity only, no network
 npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
 npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
+npx tsx src/cli.ts export                      # print the live cluster's current state as a spec YAML - reverse of render
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log]
 npx tsx src/cli.ts drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
@@ -220,7 +240,13 @@ cluster before pruning.
 - Direct **tenant**-to-user/client assignments aren't modeled by the spec
   (only tenant-to-role/group are) - role- and group-level user/client
   membership is fully supported and reconciled/cascaded by `--prune`, but
-  tenant-level direct user/client assignment is not.
+  tenant-level direct user/client assignment is not. `export` can't surface
+  this relationship either, since the underlying cluster read never fetches
+  it.
+- `export` drops authorizations whose `resourceId` is `null` (the same
+  exclusion the cluster-state reader already applies before diffing), since
+  the spec's `resourceId` is a required string with no null-equivalent - such
+  authorizations can't round-trip into a spec.
 - `plan`/`apply` read full current state once per run (not continuously),
   so back-to-back runs within the cluster's eventual-consistency window
   could theoretically miss very recent changes. Acceptable for an

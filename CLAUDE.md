@@ -21,6 +21,7 @@ cp .env.example .env   # fill in CAMUNDA_* connection details
 npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity only, no network
 npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
 npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
+npx tsx src/cli.ts export                      # print the live cluster's current state as a spec YAML - reverse of render
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log]
 npx tsx src/cli.ts drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
@@ -56,9 +57,13 @@ Pipeline, front to back: `spec/load.ts` (YAML → validated `Spec`) →
 `reconcile/diff.ts` (`buildPlan()`, `Spec` + `CurrentState` → `ReconciliationPlan`)
 → `reconcile/apply.ts` (executes the plan) → `reconcile/format.ts` (renders plan /
 result for the CLI). `src/cli.ts` wires these together per subcommand
-(`validate`/`render`/`plan`/`apply`/`drop-all`) via `commander`. `render` just loads the spec
-(resolving composition if it's an environment file) and prints it back as YAML via
-the `yaml` package's `stringify` - no network access, same as `validate`.
+(`validate`/`render`/`export`/`plan`/`apply`/`drop-all`) via `commander`. `render` just loads
+the spec (resolving composition if it's an environment file) and prints it back as YAML
+via the `yaml` package's `stringify` - no network access, same as `validate`. `export` is
+`render`'s live-cluster mirror image: `reconcile/export.ts`'s `stateToSpec()` converts a
+`fetchCurrentState()` read back into a `Spec` (inverting the relationship-flattening
+`diffRelationships()` does in `diff.ts`) and prints that as YAML - no spec file involved,
+read-only, no audit log.
 
 ### Spec and validation (`src/spec/`)
 
@@ -175,6 +180,16 @@ the raw SDK calls.
   individual failures, since the whole tool is idempotent and rerunning is
   simpler than fail-fast + manual cleanup.
 - **`format.ts`** — renders a plan or apply result for terminal output.
+- **`export.ts`** — `stateToSpec(current)` is the inverse of `diffRelationships()`:
+  it turns a `fetchCurrentState()` read back into a `Spec`, unflattening each
+  `"parentId::childId"` relationship pair-set into the corresponding nested
+  `groups`/`mappingRules`/`users`/`clients`/`roles` array on the right tenant/role/
+  group, renaming `permissionTypes` → `permissions` on authorizations (dropping
+  `authorizationKey`, which has no spec equivalent), and sorting every array for
+  deterministic, git-diffable output. Routes the result through `Spec.safeParse()`
+  as defense-in-depth (throwing `SpecExportError` on failure) since entities and
+  relationships are fetched concurrently in `fetchCurrentState()`, so a relationship
+  could in theory reference an entity deleted mid-fetch.
 - **`audit-log.ts`** — after a successful `applyPlan()` call, `cli.ts` writes
   one plain-text record per run to `./auditlog/<YYYY-MM>/` (CWD-relative,
   meant to be committed to VCS, not gitignored) via `writeAuditLog()`: who
@@ -229,7 +244,12 @@ should be checked against them.
 - Direct **tenant**-to-user/client assignments aren't modeled by the spec (only
   tenant-to-role/group are) — role- and group-level user/client membership is
   fully supported and reconciled/cascaded by `--prune`, but tenant-level direct
-  user/client assignment is not.
+  user/client assignment is not. `export` can't surface this relationship either,
+  since `CurrentState` never fetches it.
+- `export` drops authorizations whose `resourceId` is `null` (the same exclusion
+  `list-all.ts` already applies before diffing), since the spec's `resourceId` is
+  a required string with no null-equivalent — such authorizations can't round-trip
+  into a spec.
 - `plan`/`apply` read full current state once per run (not continuously), so
   back-to-back runs within the cluster's eventual-consistency window could
   theoretically miss very recent changes.

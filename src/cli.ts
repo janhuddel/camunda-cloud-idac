@@ -9,6 +9,7 @@ import { EMPTY_SPEC } from "./spec/schema.js";
 import { checkConnection } from "./camunda/client.js";
 import { fetchCurrentState } from "./camunda/list-all.js";
 import { buildPlan, type Mode } from "./reconcile/diff.js";
+import { stateToSpec } from "./reconcile/export.js";
 import { applyPlan } from "./reconcile/apply.js";
 import { gatherClusterInfo, gatherRunContext, writeAuditLog } from "./reconcile/audit-log.js";
 import { errorMessage, formatApplyResult, formatPlan } from "./reconcile/format.js";
@@ -88,6 +89,20 @@ program
   .action(async (specPath: string) => {
     try {
       const spec = await loadSpec(specPath);
+      console.log(stringifyYaml(spec));
+    } catch (err) {
+      reportError(err);
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("export")
+  .description("read the live cluster's current state and print it as a YAML spec - the reverse of `render`, no spec needed")
+  .action(async () => {
+    try {
+      const current = await fetchCurrentStateWithProgress();
+      const spec = stateToSpec(current);
       console.log(stringifyYaml(spec));
     } catch (err) {
       reportError(err);
