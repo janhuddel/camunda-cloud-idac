@@ -1,6 +1,7 @@
 node_modules/
 dist/
 specs/
+auditlog/
 .env
 *.log
 

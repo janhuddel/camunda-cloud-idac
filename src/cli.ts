@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
+import { join } from "node:path";
 import { Command } from "commander";
 import { stringify as stringifyYaml } from "yaml";
 import { loadSpec, SpecValidationError } from "./spec/load.js";
@@ -8,7 +9,8 @@ import { checkConnection } from "./camunda/client.js";
 import { fetchCurrentState } from "./camunda/list-all.js";
 import { buildPlan, type Mode } from "./reconcile/diff.js";
 import { applyPlan } from "./reconcile/apply.js";
-import { formatApplyResult, formatPlan } from "./reconcile/format.js";
+import { gatherClusterInfo, gatherRunContext, writeAuditLog } from "./reconcile/audit-log.js";
+import { errorMessage, formatApplyResult, formatPlan } from "./reconcile/format.js";
 import { createProgressReporter } from "./progress.js";
 
 // Load ./.env into process.env (if present) so CAMUNDA_* vars work without the
@@ -136,7 +138,8 @@ program
   .option("--prune", "also delete anything not in the spec", false)
   .option("--yes", "skip the interactive confirmation prompt", false)
   .option("--show-protected", "also list actions blocked by the admin/default safety guard", false)
-  .action(async (specPath: string, opts: { prune: boolean; yes: boolean; showProtected: boolean }) => {
+  .option("--no-audit-log", "skip writing an audit log file to ./auditlog/")
+  .action(async (specPath: string, opts: { prune: boolean; yes: boolean; showProtected: boolean; auditLog: boolean }) => {
     try {
       const spec = await loadSpec(specPath);
       const current = await fetchCurrentStateWithProgress();
@@ -178,6 +181,17 @@ program
       }
       console.log("");
       console.log(formatApplyResult(result, { showProtected: opts.showProtected }));
+
+      if (opts.auditLog) {
+        try {
+          const cluster = await gatherClusterInfo();
+          const auditPath = writeAuditLog(join(process.cwd(), "auditlog"), gatherRunContext(version), cluster, specPath, mode, result);
+          console.log(`Audit log written to ${auditPath}`);
+        } catch (err) {
+          console.error(`Warning: failed to write audit log: ${errorMessage(err)}`);
+        }
+      }
+
       process.exitCode = result.failed.length > 0 || plan.conflicts.length > 0 ? 1 : 0;
     } catch (err) {
       reportError(err);

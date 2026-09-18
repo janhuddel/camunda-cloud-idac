@@ -22,7 +22,7 @@ npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity 
 npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
 npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
-npx tsx src/cli.ts apply spec.yaml [--prune] [--yes]
+npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log]
 npx tsx src/cli.ts --version                   # print the tool's version
 
 npm run typecheck   # tsc --noEmit, includes test/ via tsconfig.typecheck.json
@@ -165,6 +165,23 @@ the raw SDK calls.
   individual failures, since the whole tool is idempotent and rerunning is
   simpler than fail-fast + manual cleanup.
 - **`format.ts`** — renders a plan or apply result for terminal output.
+- **`audit-log.ts`** — after a successful `applyPlan()` call, `cli.ts` writes
+  one plain-text record per run to `./auditlog/<YYYY-MM>/` (CWD-relative,
+  meant to be committed to VCS, not gitignored) via `writeAuditLog()`: who
+  (OS user via `os.userInfo()`, cross-platform including Windows), when,
+  from which machine (hostname + non-internal IPv4 addresses), which version
+  of this tool ran (`RunContext.toolVersion`, threaded in from the same
+  `version` `cli.ts` already reads out of `package.json` for `--version` -
+  not re-read), which cluster
+  (`gatherClusterInfo()`: the configured `CAMUNDA_REST_ADDRESS` plus the
+  authoritative `clusterId`/gateway version from the cluster's own topology
+  endpoint — the same call `ping` uses — since the configured address alone
+  can be ambiguous behind a shared ingress/proxy), and every action attempted
+  (succeeded/failed). Skipped when `apply` is passed `--no-audit-log`
+  (default on) or when nothing was actually applied. A write failure (audit
+  log itself, or the topology lookup) only logs a warning and never changes
+  the exit code, since the cluster changes already happened by that point —
+  this is a soft, editable/deletable audit trail, not a tamper-proof one.
 
 ### Hard safety guarantee (`protect.ts`)
 

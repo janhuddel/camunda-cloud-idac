@@ -52,7 +52,7 @@ npm install -g camunda-cloud-idac
 camunda-idac validate spec.yaml
 camunda-idac ping                       # check cluster connectivity - no spec needed
 camunda-idac plan spec.yaml [--prune]
-camunda-idac apply spec.yaml [--prune] [--yes]
+camunda-idac apply spec.yaml [--prune] [--yes] [--no-audit-log]
 camunda-idac --version
 
 # cci is an alias for camunda-idac
@@ -64,6 +64,20 @@ deletes. `apply` without `--yes` prints the plan and asks for interactive
 confirmation; it refuses to run without `--yes` on a non-interactive shell
 (CI), so a pipeline can never silently confirm a destructive prune.
 
+## Audit log
+
+Every `apply` run (unless `--no-audit-log` is passed) writes one plain-text
+record to `./auditlog/<YYYY-MM>/` (relative to the current working
+directory) - one subdirectory per calendar month, one file per run. Each
+record captures who ran it (OS user), when, from which machine (hostname +
+IP addresses), which version of this tool made the change, which Camunda
+cluster was targeted (the configured REST address plus its clusterId/gateway
+version), the spec file and mode, and
+every action that was attempted, succeeded or failed. This is a soft audit
+trail, not a tamper-proof one - the file can be edited or deleted after the
+fact - so `auditlog/` is meant to be committed to version control to build a
+durable history over time rather than gitignored.
+
 ## Development
 
 ```sh
@@ -74,7 +88,7 @@ npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity 
 npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
 npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
-npx tsx src/cli.ts apply spec.yaml [--prune] [--yes]
+npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log]
 ```
 
 Build once for a compiled binary: `npm run build && node dist/cli.js ...`.

@@ -58,7 +58,7 @@ export function formatPlan(plan: ReconciliationPlan, opts: { showProtected?: boo
   return lines.join("\n");
 }
 
-function errorMessage(error: unknown): string {
+export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   try {
     return JSON.stringify(error);
