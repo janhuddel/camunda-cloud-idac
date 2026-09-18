@@ -225,7 +225,7 @@ describe("applyProtections - integration with buildPlan (prune mode)", () => {
     const spec = Spec.parse({
       roles: [{ roleId: "admin", name: "Admin", groups: ["admin"] }],
       groups: [
-        { groupId: "admin", name: "Admin", mappingRules: ["m-new"], users: ["camunda-admin@provinzial.de"] },
+        { groupId: "admin", name: "Admin", mappingRules: ["m-new"], users: ["camunda-admin@example.com"] },
       ],
       mappingRules: [{ mappingRuleId: "m-new", claimName: "groups", claimValue: "admins" }],
     });
@@ -249,7 +249,7 @@ describe("applyProtections - integration with buildPlan (prune mode)", () => {
 
   it("allows assigning a new user directly to the admin role, even in prune mode", () => {
     const spec = Spec.parse({
-      roles: [{ roleId: "admin", name: "Admin", users: ["camunda-admin@provinzial.de"] }],
+      roles: [{ roleId: "admin", name: "Admin", users: ["camunda-admin@example.com"] }],
     });
     const current = currentState({ roles: [{ roleId: "admin", name: "Admin", description: null }] });
 

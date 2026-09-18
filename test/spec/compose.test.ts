@@ -16,35 +16,35 @@ describe("loadSpec with environment files", () => {
   it("merges base + all procapp fragments and substitutes values", async () => {
     const spec = await loadSpec(path.join(composeDir, "env-full.yaml"));
 
-    expect(spec.tenants.map((t) => t.tenantId).sort()).toEqual(["leistung", "rueckversicherung", "workflow"]);
+    expect(spec.tenants.map((t) => t.tenantId).sort()).toEqual(["billing", "logistics", "workflow"]);
 
     const processOwner = spec.roles.find((r) => r.roleId === "process-owner")!;
-    expect(processOwner.groups.sort()).toEqual(["group-leistung", "group-rueckversicherung", "group-workflow"]);
+    expect(processOwner.groups.sort()).toEqual(["group-billing", "group-logistics", "group-workflow"]);
 
     const processApplication = spec.roles.find((r) => r.roleId === "process-application")!;
-    expect(processApplication.mappingRules).toEqual(["map-client-pspref"]);
+    expect(processApplication.mappingRules).toEqual(["map-client-integration"]);
 
     const adminClaim = spec.mappingRules.find((m) => m.mappingRuleId === "map-group-admin")!;
-    expect(adminClaim.claimValue).toBe("AAD-Camunda-Admin-E0");
+    expect(adminClaim.claimValue).toBe("AAD-Camunda-Admin-DEV");
 
-    const kumulClaim = spec.mappingRules.find((m) => m.mappingRuleId === "map-client-kumul")!;
-    expect(kumulClaim.claimValue).toBe("kumul");
+    const partnerClaim = spec.mappingRules.find((m) => m.mappingRuleId === "map-client-partner")!;
+    expect(partnerClaim.claimValue).toBe("partner");
   });
 
   it("excludes a procapp omitted from include, without leaving a dangling reference", async () => {
     const spec = await loadSpec(path.join(composeDir, "env-partial.yaml"));
 
-    expect(spec.tenants.map((t) => t.tenantId).sort()).toEqual(["leistung", "workflow"]);
-    expect(spec.groups.some((g) => g.groupId === "group-rueckversicherung")).toBe(false);
+    expect(spec.tenants.map((t) => t.tenantId).sort()).toEqual(["billing", "workflow"]);
+    expect(spec.groups.some((g) => g.groupId === "group-logistics")).toBe(false);
 
     const processOwner = spec.roles.find((r) => r.roleId === "process-owner")!;
-    expect(processOwner.groups.sort()).toEqual(["group-leistung", "group-workflow"]);
+    expect(processOwner.groups.sort()).toEqual(["group-billing", "group-workflow"]);
   });
 
   it("dedupes an array contribution repeated across fragments", async () => {
     const spec = await loadSpec(path.join(composeDir, "env-array-dedup.yaml"));
     const processOwner = spec.roles.find((r) => r.roleId === "process-owner")!;
-    expect(processOwner.groups).toEqual(["group-leistung"]);
+    expect(processOwner.groups).toEqual(["group-billing"]);
   });
 
   it("rejects two fragments giving the same entity a conflicting scalar value", async () => {
@@ -55,7 +55,7 @@ describe("loadSpec with environment files", () => {
 
   it("rejects an unresolved placeholder with a clear error", async () => {
     await expect(loadSpec(path.join(composeDir, "env-unresolved.yaml"))).rejects.toThrow(
-      /unresolved placeholder.*PSPREF_CLIENT_ID/s,
+      /unresolved placeholder.*INTEGRATION_CLIENT_ID/s,
     );
   });
 

@@ -1,0 +1,22 @@
+mappingRules:
+  - mappingRuleId: map-group-logistics
+    claimName: groups
+    claimValue: AAD-Camunda-Logistics-${ENV_SUFFIX}
+  - mappingRuleId: map-client-partner
+    claimName: azp
+    claimValue: ${PARTNER_CLIENT_ID}
+
+groups:
+  - groupId: group-logistics
+    name: Gruppe Logistics
+    mappingRules: [map-group-logistics]
+
+tenants:
+  - tenantId: logistics
+    name: Tenant Logistics
+    groups: [group-logistics]
+    mappingRules: [map-client-partner]
+
+roles:
+  - roleId: process-owner
+    groups: [group-logistics]

@@ -1,7 +1,7 @@
 include:
   - base.yaml
-  - procapps/leistung.yaml
+  - procapps/billing.yaml
   - conflicting-name.yaml
 
 values:
-  ENV_SUFFIX: E0
+  ENV_SUFFIX: DEV

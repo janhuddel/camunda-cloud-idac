@@ -4,4 +4,4 @@ include:
   - dup-b.yaml
 
 values:
-  ENV_SUFFIX: E0
+  ENV_SUFFIX: DEV

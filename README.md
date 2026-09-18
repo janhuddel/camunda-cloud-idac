@@ -24,6 +24,11 @@ spec content):
   does not proactively assign the client if that assignment is missing.
 - The `<default>` system tenant is never deleted (the API already rejects
   this server-side; this is defense in depth).
+- The `admin` role never loses its assignment to the `<default>` tenant, so
+  a full `--prune` reset can never leave the tenant without an admin role.
+  Like the guardian-client guard above, this only protects an *existing*
+  assignment from removal - it does not proactively assign the role if that
+  assignment is missing.
 
 The `admin` *group* (if one exists) has **no special protection** - it's
 reconciled like any other group, including deletion under `--prune`. Adding
@@ -52,8 +57,8 @@ npm install -g camunda-cloud-idac
 camunda-idac validate spec.yaml
 camunda-idac ping                       # check cluster connectivity - no spec needed
 camunda-idac export > spec.yaml         # snapshot the live cluster as a spec YAML - reverse of render, no spec needed
-camunda-idac plan spec.yaml [--prune]
-camunda-idac apply spec.yaml [--prune] [--yes] [--no-audit-log]
+camunda-idac plan spec.yaml [--prune] [--show-protected]
+camunda-idac apply spec.yaml [--prune] [--yes] [--no-audit-log] [--show-protected]
 camunda-idac drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
 camunda-idac --version
 
@@ -65,6 +70,8 @@ cci plan spec.yaml
 deletes. `apply` without `--yes` prints the plan and asks for interactive
 confirmation; it refuses to run without `--yes` on a non-interactive shell
 (CI), so a pipeline can never silently confirm a destructive prune.
+`--show-protected` (on `plan`/`apply`) also lists actions that the **Hard
+safety guarantee** above blocked, instead of silently omitting them.
 
 ## export
 
@@ -109,7 +116,8 @@ actions are always shown (no `--show-protected` flag needed).
 
 ## Audit log
 
-Every `apply` run (unless `--no-audit-log` is passed) writes one plain-text
+Every `apply` run (unless `--no-audit-log` is passed, or there was nothing
+to apply) writes one plain-text
 record to `./auditlog/<YYYY-MM>/` (relative to the current working
 directory) - one subdirectory per calendar month, one file per run. Each
 record captures who ran it (OS user), when, from which machine (hostname +
@@ -131,10 +139,16 @@ npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity 
 npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
 npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
 npx tsx src/cli.ts export                      # print the live cluster's current state as a spec YAML - reverse of render
-npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
-npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log]
+npx tsx src/cli.ts plan spec.yaml [--prune] [--show-protected]   # dry-run diff; exit 1 if there's drift or a mapping-rule claim conflict (CI-friendly)
+npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log] [--show-protected]
 npx tsx src/cli.ts drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
 ```
+
+`plan`/`apply` also exit 1 (with no drift at all) when a spec's mapping rule
+reuses an OIDC claim already owned by a different live mapping-rule id -
+Camunda allows only one mapping rule per `(claimName, claimValue)` pair
+cluster-wide, so such a create is flagged as a conflict up front, listed
+separately from the diff, rather than left to fail at apply time.
 
 Build once for a compiled binary: `npm run build && node dist/cli.js ...`.
 
@@ -161,16 +175,16 @@ fragments into one, for organizations that run the same identity model
 across multiple environments/clusters with per-cluster differences:
 
 ```yaml
-# specs/e0.yaml
+# specs/dev.yaml
 include:
   - base.yaml
-  - procapps/leistung.yaml
+  - procapps/billing.yaml
   - procapps/workflow.yaml
   # a procapp fragment can be left out here if this cluster doesn't need it
 
 values:
-  ENV_SUFFIX: E0
-  KUMUL_CLIENT_ID: kumul
+  ENV_SUFFIX: DEV
+  INTEGRATION_CLIENT_ID: integration
 ```
 
 A file is treated as an environment file purely because it has a top-level

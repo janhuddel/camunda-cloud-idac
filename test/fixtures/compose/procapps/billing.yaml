@@ -1,0 +1,18 @@
+mappingRules:
+  - mappingRuleId: map-group-billing
+    claimName: groups
+    claimValue: AAD-Camunda-Billing-${ENV_SUFFIX}
+
+groups:
+  - groupId: group-billing
+    name: Gruppe Billing
+    mappingRules: [map-group-billing]
+
+tenants:
+  - tenantId: billing
+    name: Tenant Billing
+    groups: [group-billing]
+
+roles:
+  - roleId: process-owner
+    groups: [group-billing]

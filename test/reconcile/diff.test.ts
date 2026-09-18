@@ -141,7 +141,7 @@ describe("buildPlan - relationship diffing", () => {
 
   it("assigns a user and a client declared under a group's users/clients", () => {
     const spec = Spec.parse({
-      groups: [{ groupId: "admin", name: "Admin", users: ["camunda-admin@provinzial.de"], clients: ["ci-bot"] }],
+      groups: [{ groupId: "admin", name: "Admin", users: ["camunda-admin@example.com"], clients: ["ci-bot"] }],
     });
     const current = currentState({ groups: [{ groupId: "admin", name: "Admin", description: null }] });
     const plan = buildPlan(spec, current, "additive");
@@ -150,7 +150,7 @@ describe("buildPlan - relationship diffing", () => {
 
   it("assigns a user declared under a role's users (the admin-role case)", () => {
     const spec = Spec.parse({
-      roles: [{ roleId: "admin", name: "Admin", users: ["camunda-admin@provinzial.de"] }],
+      roles: [{ roleId: "admin", name: "Admin", users: ["camunda-admin@example.com"] }],
     });
     const current = currentState({ roles: [{ roleId: "admin", name: "Admin", description: null }] });
     const plan = buildPlan(spec, current, "additive");
@@ -159,11 +159,11 @@ describe("buildPlan - relationship diffing", () => {
 
   it("does not re-assign a role user pair that's already live (idempotent)", () => {
     const spec = Spec.parse({
-      roles: [{ roleId: "admin", name: "Admin", users: ["camunda-admin@provinzial.de"] }],
+      roles: [{ roleId: "admin", name: "Admin", users: ["camunda-admin@example.com"] }],
     });
     const current = currentState({
       roles: [{ roleId: "admin", name: "Admin", description: null }],
-      relationships: { roleUser: new Set(["admin::camunda-admin@provinzial.de"]) },
+      relationships: { roleUser: new Set(["admin::camunda-admin@example.com"]) },
     });
     const plan = buildPlan(spec, current, "additive");
     expect(plan.actions).toHaveLength(0);
@@ -171,11 +171,11 @@ describe("buildPlan - relationship diffing", () => {
 
   it("does not re-assign a group user/client pair that's already live (idempotent)", () => {
     const spec = Spec.parse({
-      groups: [{ groupId: "admin", name: "Admin", users: ["camunda-admin@provinzial.de"] }],
+      groups: [{ groupId: "admin", name: "Admin", users: ["camunda-admin@example.com"] }],
     });
     const current = currentState({
       groups: [{ groupId: "admin", name: "Admin", description: null }],
-      relationships: { groupUser: new Set(["admin::camunda-admin@provinzial.de"]) },
+      relationships: { groupUser: new Set(["admin::camunda-admin@example.com"]) },
     });
     const plan = buildPlan(spec, current, "additive");
     expect(plan.actions).toHaveLength(0);

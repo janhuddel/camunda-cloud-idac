@@ -1,7 +1,7 @@
 groups:
-  - groupId: group-leistung
-    name: Gruppe Leistung
+  - groupId: group-billing
+    name: Gruppe Billing
 
 roles:
   - roleId: process-owner
-    groups: [group-leistung]
+    groups: [group-billing]

@@ -1,9 +1,9 @@
 include:
   - base.yaml
-  - procapps/leistung.yaml
+  - procapps/billing.yaml
   - procapps/workflow.yaml
 
 values:
-  ENV_SUFFIX: E0
-  KUMUL_CLIENT_ID: kumul
-  PSPREF_CLIENT_ID: pspref
+  ENV_SUFFIX: DEV
+  PARTNER_CLIENT_ID: partner
+  INTEGRATION_CLIENT_ID: integration
