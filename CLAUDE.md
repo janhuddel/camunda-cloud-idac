@@ -23,6 +23,7 @@ npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec a
 npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log]
+npx tsx src/cli.ts drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
 npx tsx src/cli.ts --version                   # print the tool's version
 
 npm run typecheck   # tsc --noEmit, includes test/ via tsconfig.typecheck.json
@@ -37,6 +38,13 @@ Run a single test file: `npx vitest run test/reconcile/protect.test.ts`.
 refuses to run without `--yes` on a non-interactive shell (CI), so a pipeline can
 never silently confirm a destructive prune.
 
+`drop-all` is `apply --prune` against an implicit, fully-empty spec
+(`EMPTY_SPEC` in `spec/schema.ts`) — it takes no spec argument at all. Because
+there's no spec file to act as a "receipt" of intent, its interactive
+confirmation requires typing the target cluster's ID (or the literal phrase
+`DROP ALL` if no cluster ID could be determined) rather than a y/N answer;
+`--yes` still skips this and is still required on a non-interactive shell.
+
 There is no integration test suite against a live cluster — run the CLI commands
 above manually against a local `c8run` cluster before relying on `--prune` in
 production.
@@ -48,7 +56,7 @@ Pipeline, front to back: `spec/load.ts` (YAML → validated `Spec`) →
 `reconcile/diff.ts` (`buildPlan()`, `Spec` + `CurrentState` → `ReconciliationPlan`)
 → `reconcile/apply.ts` (executes the plan) → `reconcile/format.ts` (renders plan /
 result for the CLI). `src/cli.ts` wires these together per subcommand
-(`validate`/`render`/`plan`/`apply`) via `commander`. `render` just loads the spec
+(`validate`/`render`/`plan`/`apply`/`drop-all`) via `commander`. `render` just loads the spec
 (resolving composition if it's an environment file) and prints it back as YAML via
 the `yaml` package's `stringify` - no network access, same as `validate`.
 
@@ -57,7 +65,9 @@ the `yaml` package's `stringify` - no network access, same as `validate`.
 `schema.ts` defines the Zod schema for the YAML spec: `tenants`, `roles`, `groups`,
 `mappingRules`, `authorizations` (all optional, default `[]`). Every object schema
 uses `.strict()` deliberately — a typo'd key would otherwise be silently dropped
-and parse "successfully" while doing nothing. `OwnerType`/`ResourceType`/
+and parse "successfully" while doing nothing. `EMPTY_SPEC` is the one exported,
+fully-empty `Spec` value (all five arrays `[]`); the `drop-all` CLI command diffs
+against it in `"prune"` mode as its "delete everything" target state. `OwnerType`/`ResourceType`/
 `PermissionType` enums are copied verbatim from the SDK's shipped `.d.ts`; re-check
 them against `node_modules/@camunda8/orchestration-cluster-api` whenever the pinned
 SDK version in `package.json` changes, since a drifted enum here would silently

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPlan } from "../../src/reconcile/diff.js";
-import { Spec } from "../../src/spec/schema.js";
+import { EMPTY_SPEC, Spec } from "../../src/spec/schema.js";
 import { currentState } from "../fixtures/current-state.fixtures.js";
 import type { ActionKind } from "../../src/reconcile/types.js";
 
@@ -9,6 +9,20 @@ function kinds(actions: { kind: ActionKind }[]): ActionKind[] {
 }
 
 const emptySpec = () => Spec.parse({});
+
+describe("EMPTY_SPEC", () => {
+  it("behaves identically to Spec.parse({}) as a prune-mode diff target (drop-all's target state)", () => {
+    const current = currentState({ roles: [{ roleId: "extra", name: "Extra", description: null }] });
+    const describeAction = (a: { kind: ActionKind; description: string }) => ({ kind: a.kind, description: a.description });
+
+    const viaEmptySpec = buildPlan(EMPTY_SPEC, current, "prune");
+    const viaLocalHelper = buildPlan(emptySpec(), current, "prune");
+
+    expect(viaEmptySpec.actions.map(describeAction)).toEqual(viaLocalHelper.actions.map(describeAction));
+    expect(viaEmptySpec.warnings).toEqual(viaLocalHelper.warnings);
+    expect(viaEmptySpec.conflicts).toEqual(viaLocalHelper.conflicts);
+  });
+});
 
 describe("buildPlan - entity create/update/no-op", () => {
   it("plans a create for a role that doesn't exist yet", () => {

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Command } from "commander";
 import { stringify as stringifyYaml } from "yaml";
 import { loadSpec, SpecValidationError } from "./spec/load.js";
+import { EMPTY_SPEC } from "./spec/schema.js";
 import { checkConnection } from "./camunda/client.js";
 import { fetchCurrentState } from "./camunda/list-all.js";
 import { buildPlan, type Mode } from "./reconcile/diff.js";
@@ -186,6 +187,76 @@ program
         try {
           const cluster = await gatherClusterInfo();
           const auditPath = writeAuditLog(join(process.cwd(), "auditlog"), gatherRunContext(version), cluster, specPath, mode, result);
+          console.log(`Audit log written to ${auditPath}`);
+        } catch (err) {
+          console.error(`Warning: failed to write audit log: ${errorMessage(err)}`);
+        }
+      }
+
+      process.exitCode = result.failed.length > 0 || plan.conflicts.length > 0 ? 1 : 0;
+    } catch (err) {
+      reportError(err);
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("drop-all")
+  .description("delete every tenant, role, group, mapping rule, and authorization from the cluster (except the admin/<default> safety guard) - no spec needed")
+  .option("--yes", "skip the interactive confirmation prompt", false)
+  .option("--no-audit-log", "skip writing an audit log file to ./auditlog/")
+  .action(async (opts: { yes: boolean; auditLog: boolean }) => {
+    try {
+      const cluster = await gatherClusterInfo();
+      const current = await fetchCurrentStateWithProgress();
+      const plan = buildPlan(EMPTY_SPEC, current, "prune");
+      console.log(formatPlan(plan, { showProtected: true }));
+
+      if (plan.actions.length === 0) {
+        console.log("Nothing to drop.");
+        process.exitCode = plan.conflicts.length > 0 ? 1 : 0;
+        return;
+      }
+
+      const clusterLabel = `${cluster.address ?? "<unknown address>"}${cluster.clusterId ? ` (clusterId: ${cluster.clusterId})` : ""}`;
+      console.error(`\nWARNING: this will delete ${plan.actions.length} object(s) from cluster ${clusterLabel}.`);
+
+      if (!opts.yes) {
+        if (!process.stdin.isTTY) {
+          console.error("\nRefusing to drop all without --yes in a non-interactive shell.");
+          process.exitCode = 1;
+          return;
+        }
+        const token = cluster.clusterId ?? "DROP ALL";
+        const prompt = cluster.clusterId
+          ? `\nType the cluster ID (${token}) to confirm deletion: `
+          : `\nNo clusterId could be determined for this cluster. Type "DROP ALL" to confirm deletion: `;
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await rl.question(prompt);
+        rl.close();
+        if (answer.trim() !== token) {
+          console.log("Aborted.");
+          return;
+        }
+      }
+
+      const applyProgress = createProgressReporter();
+      let result;
+      try {
+        result = await applyPlan(plan, (e) => {
+          if (e.type === "start") {
+            applyProgress.update(`[${e.index + 1}/${e.total}] ${e.action.description}`);
+          }
+        });
+      } finally {
+        applyProgress.stop();
+      }
+      console.log("");
+      console.log(formatApplyResult(result, { showProtected: true }));
+
+      if (opts.auditLog) {
+        try {
+          const auditPath = writeAuditLog(join(process.cwd(), "auditlog"), gatherRunContext(version), cluster, "drop-all", "prune", result);
           console.log(`Audit log written to ${auditPath}`);
         } catch (err) {
           console.error(`Warning: failed to write audit log: ${errorMessage(err)}`);

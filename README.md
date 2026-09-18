@@ -53,6 +53,7 @@ camunda-idac validate spec.yaml
 camunda-idac ping                       # check cluster connectivity - no spec needed
 camunda-idac plan spec.yaml [--prune]
 camunda-idac apply spec.yaml [--prune] [--yes] [--no-audit-log]
+camunda-idac drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
 camunda-idac --version
 
 # cci is an alias for camunda-idac
@@ -63,6 +64,29 @@ cci plan spec.yaml
 deletes. `apply` without `--yes` prints the plan and asks for interactive
 confirmation; it refuses to run without `--yes` on a non-interactive shell
 (CI), so a pipeline can never silently confirm a destructive prune.
+
+## drop-all
+
+```sh
+camunda-idac drop-all [--yes] [--no-audit-log]
+```
+
+Deletes every tenant, role, group, mapping rule, and authorization from the
+cluster - the nuclear option, useful for tearing down a throwaway/demo/test
+cluster. Takes no spec argument: it's equivalent to `apply --prune` against
+an implicit, fully-empty spec.
+
+Because there's no spec file to act as a "receipt" of intent, confirmation
+is stricter than `apply --prune`'s y/N prompt: instead you must type the
+target cluster's ID to proceed (or the literal phrase `DROP ALL` if no
+cluster ID could be determined). `--yes` skips this entirely and is
+required on a non-interactive shell (CI), same as `apply`.
+
+The same **Hard safety guarantee** described above applies unchanged -
+`drop-all` goes through the identical `applyProtections()` post-filter, so
+the `admin` role, its authorizations, this tool's own client's `admin`
+assignment, and the `<default>` tenant are never touched. Protected/blocked
+actions are always shown (no `--show-protected` flag needed).
 
 ## Audit log
 
@@ -89,6 +113,7 @@ npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec a
 npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log]
+npx tsx src/cli.ts drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
 ```
 
 Build once for a compiled binary: `npm run build && node dist/cli.js ...`.

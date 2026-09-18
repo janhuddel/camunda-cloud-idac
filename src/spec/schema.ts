@@ -301,3 +301,8 @@ export const Spec = RawSpec.superRefine((spec, ctx) => {
 });
 
 export type Spec = z.infer<typeof Spec>;
+
+/** A fully-empty, valid Spec (all five entity arrays `[]`) - used by the
+ * `drop-all` command as the "target state" for a full-cluster prune: diffing
+ * against nothing is exactly the definition of "delete everything". */
+export const EMPTY_SPEC: Spec = Spec.parse({});
