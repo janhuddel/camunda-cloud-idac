@@ -121,8 +121,8 @@ export type ActionTarget =
   | { kind: "delete-group"; groupId: string }
   | { kind: "delete-mapping-rule"; mappingRuleId: string }
   // Covers create-authorization, update-authorization, AND delete-authorization -
-  // the "admin" role's authorizations are fully hands-off (never created, updated,
-  // or deleted by this tool), not merely protected from deletion.
+  // the Camunda default roles' authorizations are fully hands-off (never created,
+  // updated, or deleted by this tool), not merely protected from deletion.
   | { kind: "authorization"; ownerType: OwnerType; ownerId: string }
   // Only unassign-role-client carries this - lets protect.ts guard one specific
   // relationship edge (the tool's own client keeping the admin role) without

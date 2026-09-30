@@ -130,7 +130,7 @@ program
   .description("show what would change against the live cluster, without applying anything")
   .argument("<spec>", "path to the YAML spec file")
   .option("--prune", "also compute deletions for anything not in the spec", false)
-  .option("--show-protected", "also list actions blocked by the admin/default safety guard", false)
+  .option("--show-protected", "also list actions blocked by the default-role/<default> safety guard", false)
   .action(async (specPath: string, opts: { prune: boolean; showProtected: boolean }) => {
     try {
       const spec = await loadSpec(specPath);
@@ -153,7 +153,7 @@ program
   .argument("<spec>", "path to the YAML spec file")
   .option("--prune", "also delete anything not in the spec", false)
   .option("--yes", "skip the interactive confirmation prompt", false)
-  .option("--show-protected", "also list actions blocked by the admin/default safety guard", false)
+  .option("--show-protected", "also list actions blocked by the default-role/<default> safety guard", false)
   .option("--no-audit-log", "skip writing an audit log file to ./auditlog/")
   .action(async (specPath: string, opts: { prune: boolean; yes: boolean; showProtected: boolean; auditLog: boolean }) => {
     try {
@@ -217,7 +217,7 @@ program
 
 program
   .command("drop-all")
-  .description("delete every tenant, role, group, mapping rule, and authorization from the cluster (except the admin/<default> safety guard) - no spec needed")
+  .description("delete every tenant, role, group, mapping rule, and authorization from the cluster (except the default-role/<default> safety guard) - no spec needed")
   .option("--yes", "skip the interactive confirmation prompt", false)
   .option("--no-audit-log", "skip writing an audit log file to ./auditlog/")
   .action(async (opts: { yes: boolean; auditLog: boolean }) => {

@@ -4,6 +4,24 @@ export const PROTECTED_ROLE_ID = "admin";
 export const PROTECTED_TENANT_ID = "<default>";
 
 /**
+ * Camunda's predefined roles (see
+ * https://docs.camunda.io/docs/components/concepts/access-control/authorizations/#default-roles).
+ * The Orchestration Cluster recreates any of these that are missing on every
+ * startup, together with their default authorizations - so deleting them (or
+ * their authorizations) here would only produce permanent drift that reappears
+ * after the next cluster restart. Re-check this list against the docs when
+ * upgrading the Camunda version this tool targets.
+ */
+export const DEFAULT_ROLE_IDS: ReadonlySet<string> = new Set([
+  PROTECTED_ROLE_ID,
+  "app-integrations",
+  "connectors",
+  "readonly-admin",
+  "rpa",
+  "task-worker",
+]);
+
+/**
  * The client this tool itself authenticates as (from CAMUNDA_CLIENT_ID, the same
  * variable createCamundaClientLoose() reads). Its assignment to the admin role is
  * protected from removal so a full reset can never lock the tool itself out.
@@ -26,10 +44,13 @@ function getGuardianClientId(): string | undefined {
  * trust the invariant holds.
  *
  * Current invariants (narrowed by explicit product decision - the "admin" group,
- * if one exists, is no longer specially protected; only the "admin" role is):
- *  1. The "admin" role itself is never deleted.
- *  2. The "admin" role's authorizations are fully hands-off: never created,
+ * if one exists, is no longer specially protected; only the default roles are):
+ *  1. No Camunda default role (DEFAULT_ROLE_IDS, including "admin") is ever
+ *     deleted.
+ *  2. The default roles' authorizations are fully hands-off: never created,
  *     updated, or deleted by this tool - not merely protected from deletion.
+ *     Their memberships (users/clients/groups/mapping rules/tenants) are
+ *     reconciled like any other role's, apart from rules 3 and 5.
  *  3. This tool's own client (CAMUNDA_CLIENT_ID) never loses its assignment to
  *     the admin role, so a full reset can't lock the tool out of the cluster it
  *     just reset. Every other role<->client pair (including other clients
@@ -58,16 +79,20 @@ export function applyProtections(actions: PlannedAction[]): { actions: PlannedAc
 
     const target = action.target;
 
-    if (target.kind === "delete-role" && target.roleId === PROTECTED_ROLE_ID) {
-      return block(`the "${PROTECTED_ROLE_ID}" role must never be deleted`);
+    if (target.kind === "delete-role" && DEFAULT_ROLE_IDS.has(target.roleId)) {
+      return block(
+        `the "${target.roleId}" role is a Camunda default role (recreated on every cluster start) and must never be deleted`,
+      );
     }
 
     if (target.kind === "delete-tenant" && target.tenantId === PROTECTED_TENANT_ID) {
       return block(`the ${PROTECTED_TENANT_ID} system tenant must never be deleted`);
     }
 
-    if (target.kind === "authorization" && target.ownerType === "ROLE" && target.ownerId === PROTECTED_ROLE_ID) {
-      return block(`authorizations of the "${PROTECTED_ROLE_ID}" role must never be created, updated, or deleted`);
+    if (target.kind === "authorization" && target.ownerType === "ROLE" && DEFAULT_ROLE_IDS.has(target.ownerId)) {
+      return block(
+        `authorizations of the "${target.ownerId}" role (a Camunda default role) must never be created, updated, or deleted`,
+      );
     }
 
     if (

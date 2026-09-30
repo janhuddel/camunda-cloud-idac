@@ -24,7 +24,7 @@ npx tsx src/cli.ts ping                        # check cluster connectivity - no
 npx tsx src/cli.ts export                      # print the live cluster's current state as a spec YAML - reverse of render
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log]
-npx tsx src/cli.ts drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
+npx tsx src/cli.ts drop-all [--yes] [--no-audit-log]  # delete everything except the default-role/<default> guard rail - no spec needed
 npx tsx src/cli.ts --version                   # print the tool's version
 
 npm run typecheck   # tsc --noEmit, includes test/ via tsconfig.typecheck.json
@@ -212,8 +212,13 @@ the raw SDK calls.
 
 Applied unconditionally after diffing, regardless of spec content:
 
-- The `admin` role is never deleted.
-- The `admin` role's authorizations are fully hands-off: never created, updated,
+- Camunda's default roles (`DEFAULT_ROLE_IDS`: `admin`, `app-integrations`,
+  `connectors`, `readonly-admin`, `rpa`, `task-worker`) are never deleted — the
+  cluster recreates any missing one on every startup, so pruning them would only
+  cause permanent drift. Re-check this list against
+  https://docs.camunda.io/docs/components/concepts/access-control/authorizations/#default-roles
+  when the targeted Camunda version changes.
+- The default roles' authorizations are fully hands-off: never created, updated,
   or deleted by this tool at all — not merely protected from deletion.
 - This tool's own client (`CAMUNDA_CLIENT_ID`) never loses its assignment to the
   `admin` role, so a full `--prune` reset can never lock the tool itself out. This
@@ -230,9 +235,10 @@ Applied unconditionally after diffing, regardless of spec content:
 
 The `admin` *group* (if one exists) has **no special protection** — it's
 reconciled like any other group, including deletion under `--prune`. Adding or
-removing members (users/clients/groups/mapping rules) on the `admin` role is
-always fine; only deleting the role itself, mutating its authorizations, or
-unassigning the tool's own client from it are guarded.
+removing members (users/clients/groups/mapping rules/tenants) on any default
+role is always fine; only deleting the role itself, mutating its authorizations,
+or the two `admin`-specific edges (guardian client, `<default>` tenant) are
+guarded.
 
 `test/reconcile/protect.test.ts` and `test/reconcile/diff.test.ts` are the
 load-bearing test suites — they cover this invariant and the cascading-delete

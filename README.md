@@ -14,8 +14,11 @@ against a live cluster, updates entities in place, and supports pruning
 point for all of this, applied unconditionally after diffing regardless of
 spec content):
 
-- The `admin` role is never deleted.
-- The `admin` role's authorizations are fully hands-off: never created,
+- Camunda's [default roles](https://docs.camunda.io/docs/components/concepts/access-control/authorizations/#default-roles)
+  (`admin`, `app-integrations`, `connectors`, `readonly-admin`, `rpa`,
+  `task-worker`) are never deleted. The cluster recreates any missing default
+  role on every startup, so deleting one would only cause permanent drift.
+- The default roles' authorizations are fully hands-off: never created,
   updated, or deleted by this tool at all - not merely protected from
   deletion.
 - This tool's own client (`CAMUNDA_CLIENT_ID`) never loses its assignment to
@@ -32,10 +35,11 @@ spec content):
 
 The `admin` *group* (if one exists) has **no special protection** - it's
 reconciled like any other group, including deletion under `--prune`. Adding
-or removing members (users/clients/groups/mapping rules) on the `admin`
-role is always fine and unaffected by any of the above; only deleting the
-role itself, mutating its authorizations, or unassigning the tool's own
-client from it are guarded.
+or removing members (users/clients/groups/mapping rules/tenants) on any
+default role is always fine and unaffected by any of the above (e.g. you can
+declare `connectors` in your spec just to assign clients to it); only
+deleting the role itself, mutating its authorizations, or the two
+`admin`-specific edges above are guarded.
 
 ## Installation
 
@@ -59,7 +63,7 @@ camunda-idac ping                       # check cluster connectivity - no spec n
 camunda-idac export > spec.yaml         # snapshot the live cluster as a spec YAML - reverse of render, no spec needed
 camunda-idac plan spec.yaml [--prune] [--show-protected]
 camunda-idac apply spec.yaml [--prune] [--yes] [--no-audit-log] [--show-protected]
-camunda-idac drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
+camunda-idac drop-all [--yes] [--no-audit-log]  # delete everything except the default-role/<default> guard rail - no spec needed
 camunda-idac --version
 
 # cci is an alias for camunda-idac
@@ -110,7 +114,7 @@ required on a non-interactive shell (CI), same as `apply`.
 
 The same **Hard safety guarantee** described above applies unchanged -
 `drop-all` goes through the identical `applyProtections()` post-filter, so
-the `admin` role, its authorizations, this tool's own client's `admin`
+the default roles, their authorizations, this tool's own client's `admin`
 assignment, and the `<default>` tenant are never touched. Protected/blocked
 actions are always shown (no `--show-protected` flag needed).
 
@@ -141,7 +145,7 @@ npx tsx src/cli.ts ping                        # check cluster connectivity - no
 npx tsx src/cli.ts export                      # print the live cluster's current state as a spec YAML - reverse of render
 npx tsx src/cli.ts plan spec.yaml [--prune] [--show-protected]   # dry-run diff; exit 1 if there's drift or a mapping-rule claim conflict (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log] [--show-protected]
-npx tsx src/cli.ts drop-all [--yes] [--no-audit-log]  # delete everything except the admin/<default> guard rail - no spec needed
+npx tsx src/cli.ts drop-all [--yes] [--no-audit-log]  # delete everything except the default-role/<default> guard rail - no spec needed
 ```
 
 `plan`/`apply` also exit 1 (with no drift at all) when a spec's mapping rule
@@ -274,7 +278,7 @@ npm test            # vitest - schema, diff, protect (safety-critical), order
 ```
 
 `test/reconcile/protect.test.ts` and `test/reconcile/diff.test.ts` are the
-load-bearing suites: they cover the admin/default protection invariant and
+load-bearing suites: they cover the default-role/`<default>` protection invariant and
 the cascading-delete ordering directly.
 
 No integration test suite against a live cluster yet - run the commands

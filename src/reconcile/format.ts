@@ -25,7 +25,7 @@ function colorFor(action: PlannedAction): (text: string) => string {
 /** Shared renderer used by both `plan` and the pre-confirmation display in `apply`,
  * so what `apply` is about to do is guaranteed to match what `plan` reported.
  *
- * Protection warnings (admin role/authorizations/guardian client blocked from a
+ * Protection warnings (default roles/authorizations/guardian client blocked from a
  * would-be deletion, the <default> tenant, etc.) are structural and permanent -
  * they'll fire on every single prune run for as long as those invariants exist,
  * so they're noise once you already know the policy. Hidden by default; pass

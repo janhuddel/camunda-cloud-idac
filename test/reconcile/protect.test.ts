@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applyProtections } from "../../src/reconcile/protect.js";
+import { applyProtections, DEFAULT_ROLE_IDS } from "../../src/reconcile/protect.js";
 import { buildPlan } from "../../src/reconcile/diff.js";
 import { Spec } from "../../src/spec/schema.js";
 import { currentState } from "../fixtures/current-state.fixtures.js";
@@ -55,6 +55,57 @@ describe("applyProtections - unit level", () => {
     ];
     const { actions: kept, warnings } = applyProtections(actions);
     expect(kept).toHaveLength(2);
+    expect(warnings).toHaveLength(0);
+  });
+
+  it("covers exactly Camunda's documented default roles", () => {
+    expect([...DEFAULT_ROLE_IDS].sort()).toEqual([
+      "admin",
+      "app-integrations",
+      "connectors",
+      "readonly-admin",
+      "rpa",
+      "task-worker",
+    ]);
+  });
+
+  it.each([...DEFAULT_ROLE_IDS])("blocks deleting the %s default role", (roleId) => {
+    const action = fakeAction({ kind: "delete-role", target: { kind: "delete-role", roleId } });
+    const { actions, warnings } = applyProtections([action]);
+    expect(actions).toHaveLength(0);
+    expect(warnings[0]).toContain(`"${roleId}" role is a Camunda default role`);
+  });
+
+  it.each([...DEFAULT_ROLE_IDS])("blocks creating, updating, and deleting authorizations owned by ROLE:%s", (roleId) => {
+    const target = { kind: "authorization", ownerType: "ROLE", ownerId: roleId } as const;
+    const actions = [
+      fakeAction({ kind: "create-authorization", target }),
+      fakeAction({ kind: "update-authorization", target }),
+      fakeAction({ kind: "delete-authorization", target }),
+    ];
+    const { actions: kept, warnings } = applyProtections(actions);
+    expect(kept).toHaveLength(0);
+    expect(warnings).toHaveLength(3);
+  });
+
+  it("does NOT block authorization mutations for non-ROLE owners named like a default role", () => {
+    const actions = [
+      fakeAction({ kind: "delete-authorization", target: { kind: "authorization", ownerType: "GROUP", ownerId: "connectors" } }),
+      fakeAction({ kind: "delete-authorization", target: { kind: "authorization", ownerType: "USER", ownerId: "rpa" } }),
+      fakeAction({ kind: "delete-authorization", target: { kind: "authorization", ownerType: "CLIENT", ownerId: "task-worker" } }),
+    ];
+    const { actions: kept, warnings } = applyProtections(actions);
+    expect(kept).toHaveLength(3);
+    expect(warnings).toHaveLength(0);
+  });
+
+  it("does NOT extend the admin-only <default> tenant guard to other default roles", () => {
+    const action = fakeAction({
+      kind: "unassign-tenant-role",
+      target: { kind: "unassign-tenant-role", tenantId: "<default>", roleId: "connectors" },
+    });
+    const { actions, warnings } = applyProtections([action]);
+    expect(actions).toHaveLength(1);
     expect(warnings).toHaveLength(0);
   });
 
@@ -163,6 +214,15 @@ describe("applyProtections - unit level", () => {
       expect(actions).toHaveLength(1);
     });
 
+    it("does NOT block unassigning the guardian client from a non-admin default role", () => {
+      const action = fakeAction({
+        kind: "unassign-role-client",
+        target: { kind: "unassign-role-client", roleId: "connectors", clientId: "tool-service-account" },
+      });
+      const { actions } = applyProtections([action]);
+      expect(actions).toHaveLength(1);
+    });
+
     it("does not blow up and does not block anything when CAMUNDA_CLIENT_ID is unset", () => {
       delete process.env.CAMUNDA_CLIENT_ID;
       const action = fakeAction({
@@ -219,6 +279,44 @@ describe("applyProtections - integration with buildPlan (prune mode)", () => {
       true,
     );
     expect(plan.warnings.some((w) => /default.*tenant/i.test(w))).toBe(true);
+  });
+
+  it("never deletes the non-admin default roles or their authorizations, but still prunes their members", () => {
+    const spec = Spec.parse({});
+    const current = currentState({
+      roles: [
+        { roleId: "connectors", name: "Connectors", description: null },
+        { roleId: "readonly-admin", name: "Readonly Admin", description: null },
+        { roleId: "process-owner", name: "Process Owner", description: null },
+      ],
+      authorizations: [
+        {
+          authorizationKey: "connectors-auth",
+          ownerId: "connectors",
+          ownerType: "ROLE",
+          resourceType: "PROCESS_DEFINITION",
+          resourceId: "*",
+          permissionTypes: ["READ_PROCESS_DEFINITION"],
+        },
+        {
+          authorizationKey: "readonly-admin-auth",
+          ownerId: "readonly-admin",
+          ownerType: "ROLE",
+          resourceType: "RESOURCE",
+          resourceId: "*",
+          permissionTypes: ["READ"],
+        },
+      ],
+      relationships: { roleClient: new Set(["connectors::connectors-client"]) },
+    });
+
+    const plan = buildPlan(spec, current, "prune");
+    const descriptions = plan.actions.map((a) => a.description);
+    expect(descriptions).toEqual([
+      'unassign client "connectors-client" to role "connectors"',
+      'delete role "process-owner"',
+    ]);
+    expect(plan.warnings.filter((w) => /Camunda default role/.test(w))).toHaveLength(4);
   });
 
   it("still allows adding new members to the admin group via assign, and does not block unassign of a stale one", () => {
