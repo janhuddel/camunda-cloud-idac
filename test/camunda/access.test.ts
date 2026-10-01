@@ -78,7 +78,7 @@ describe("formatMissingAccess", () => {
   it("names the client, the missing permissions, the roles seen and the escape hatch", () => {
     const text = formatMissingAccess({ roles: [], groups: [] }, "idac", ["ROLE:CREATE", "TENANT:DELETE"]);
     expect(text).toMatch(/Client 'idac'/);
-    expect(text).toMatch(/ROLE:CREATE, TENANT:DELETE/);
+    expect(text).toMatch(/Missing: ROLE:CREATE, TENANT:DELETE/);
     expect(text).toMatch(/'admin' role/);
     expect(text).toMatch(/Roles seen for this client: <none>/);
     expect(text).toMatch(/--no-permission-check/);

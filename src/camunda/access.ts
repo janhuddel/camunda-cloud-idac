@@ -1,3 +1,4 @@
+import { stderrColors } from "../colors.js";
 import { getClient } from "./client.js";
 import { listAllAuthorizations } from "./list-all.js";
 import { getGuardianClientId, PROTECTED_ROLE_ID } from "../reconcile/protect.js";
@@ -73,12 +74,15 @@ export class InsufficientPermissionsError extends Error {
 }
 
 export function formatMissingAccess(identity: Identity, clientId: string | undefined, missing: readonly string[]): string {
+  // Always reported via console.error (reportError / ping), hence stderr colors.
+  const { bold, dim, red, yellow } = stderrColors;
   const who = clientId ? `Client '${clientId}'` : "The configured client";
   const roles = identity.roles.length > 0 ? identity.roles.join(", ") : "<none>";
   return [
-    `${who} lacks the permissions required to manage identity entities (missing: ${missing.join(", ")}).`,
-    `Assign it to the '${PROTECTED_ROLE_ID}' role or grant these permissions on resourceId '*', then rerun.`,
-    `Roles seen for this client: ${roles}. (Use --no-permission-check to bypass this check.)`,
+    red(bold(`${who} lacks the permissions required to manage identity entities.`)),
+    `${red("Missing:")} ${yellow(missing.join(", "))}`,
+    `Assign it to the ${bold(`'${PROTECTED_ROLE_ID}'`)} role or grant these permissions on resourceId '*', then rerun.`,
+    dim(`Roles seen for this client: ${roles}. (Use --no-permission-check to bypass this check.)`),
   ].join("\n");
 }
 

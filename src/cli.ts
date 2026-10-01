@@ -16,6 +16,7 @@ import { applyPlan } from "./reconcile/apply.js";
 import { gatherClusterInfo, gatherRunContext, writeAuditLog } from "./reconcile/audit-log.js";
 import { errorMessage, formatApplyResult, formatPlan } from "./reconcile/format.js";
 import { createProgressReporter } from "./progress.js";
+import { stderrColors } from "./colors.js";
 
 // Load ./.env into process.env (if present) so CAMUNDA_* vars work without the
 // operator having to `export` each line by hand. Silently ignored when there's
@@ -145,7 +146,7 @@ program
       }
       const read = evaluateAccess(identity, authorizations, clientId, "read");
       if (read.ok) {
-        console.error(`Warning: read-only access - plan/export work, apply/drop-all will be refused.`);
+        console.error(stderrColors.yellow("Warning: read-only access - plan/export work, apply/drop-all will be refused."));
         console.error(formatMissingAccess(identity, clientId, write.missing));
       } else {
         console.error(formatMissingAccess(identity, clientId, read.missing));
