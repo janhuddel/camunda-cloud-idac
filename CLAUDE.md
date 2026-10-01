@@ -20,7 +20,7 @@ cp .env.example .env   # fill in CAMUNDA_* connection details
 
 npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity only, no network
 npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
-npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
+npx tsx src/cli.ts ping                        # check cluster connectivity + this client's permissions - no spec needed
 npx tsx src/cli.ts export                      # print the live cluster's current state as a spec YAML - reverse of render
 npx tsx src/cli.ts plan spec.yaml [--prune]    # dry-run diff; exit 1 if there's drift (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log]
@@ -133,6 +133,18 @@ them, paginated via `paginateAll()`. Relationship membership is queried for ever
 *current* entity, not just ones named in the desired spec — this is what makes
 cascading deletes possible in prune mode, since an entity about to be pruned still
 has its stale links surfaced for `diff.ts` to unassign first.
+
+`access.ts` is the permission preflight: `plan`/`export` call `checkAccess("read")`
+and `apply`/`drop-all` call `checkAccess("write")` before touching any state
+(skippable via `--no-permission-check`), and `ping` reports the same evaluation.
+It exists because Camunda's search endpoints never 403 on missing READ permission -
+they silently filter results, so an under-privileged client would otherwise see an
+"empty" cluster and plan to create everything. `evaluateAccess()` is pure: membership
+in the `admin` role (from `getAuthentication()`, i.e. `/v2/authentication/me`, which
+also works for M2M clients) passes outright; otherwise wildcard (`resourceId: "*"`)
+authorizations owned by the client (`getGuardianClientId()`) or one of its
+roles/groups must cover the required permissions on AUTHORIZATION/ROLE/GROUP/
+TENANT/MAPPING_RULE.
 
 `ops.ts` has one object per entity type (`tenantOps`, `roleOps`, `groupOps`,
 `mappingRuleOps`, `authorizationOps`) with thin `Result`-returning wrappers around

@@ -29,7 +29,7 @@ export const DEFAULT_ROLE_IDS: ReadonlySet<string> = new Set([
  * isn't already assigned to the admin role, this tool will not assign it - it
  * only guards an existing assignment from being pruned away.
  */
-function getGuardianClientId(): string | undefined {
+export function getGuardianClientId(): string | undefined {
   return process.env.CAMUNDA_CLIENT_ID;
 }
 

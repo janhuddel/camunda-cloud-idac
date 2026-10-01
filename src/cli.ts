@@ -7,6 +7,8 @@ import { stringify as stringifyYaml } from "yaml";
 import { loadSpec, SpecValidationError } from "./spec/load.js";
 import { EMPTY_SPEC } from "./spec/schema.js";
 import { checkConnection } from "./camunda/client.js";
+import { checkAccess, evaluateAccess, fetchAccessInputs, formatMissingAccess } from "./camunda/access.js";
+import { getGuardianClientId } from "./reconcile/protect.js";
 import { fetchCurrentState } from "./camunda/list-all.js";
 import { buildPlan, type Mode } from "./reconcile/diff.js";
 import { stateToSpec } from "./reconcile/export.js";
@@ -62,6 +64,11 @@ const { version } = JSON.parse(readFileSync(new URL("../package.json", import.me
   version: string;
 };
 
+// Commander's "--no-*" form: sets opts.permissionCheck = false when passed.
+const SKIP_CHECK_FLAG = "--no-permission-check";
+const SKIP_CHECK_DESCRIPTION =
+  "skip the preflight check that this tool's client has the permissions it needs (e.g. for clusters with authorizations disabled)";
+
 const program = new Command();
 program
   .name("camunda-idac")
@@ -99,8 +106,10 @@ program
 program
   .command("export")
   .description("read the live cluster's current state and print it as a YAML spec - the reverse of `render`, no spec needed")
-  .action(async () => {
+  .option(SKIP_CHECK_FLAG, SKIP_CHECK_DESCRIPTION)
+  .action(async (opts: { permissionCheck: boolean }) => {
     try {
+      if (opts.permissionCheck) await checkAccess("read");
       const current = await fetchCurrentStateWithProgress();
       const spec = stateToSpec(current);
       console.log(stringifyYaml(spec));
@@ -122,6 +131,29 @@ program
     } else {
       reportError(result.error);
       process.exitCode = 1;
+      return;
+    }
+
+    try {
+      const { identity, authorizations } = await fetchAccessInputs();
+      const clientId = getGuardianClientId();
+      console.log(`Roles: ${identity.roles.length > 0 ? identity.roles.join(", ") : "<none>"}.`);
+      const write = evaluateAccess(identity, authorizations, clientId, "write");
+      if (write.ok) {
+        console.log(`Permissions: OK (${write.via === "admin-role" ? "admin role" : "via authorizations"}).`);
+        return;
+      }
+      const read = evaluateAccess(identity, authorizations, clientId, "read");
+      if (read.ok) {
+        console.error(`Warning: read-only access - plan/export work, apply/drop-all will be refused.`);
+        console.error(formatMissingAccess(identity, clientId, write.missing));
+      } else {
+        console.error(formatMissingAccess(identity, clientId, read.missing));
+        process.exitCode = 1;
+      }
+    } catch (err) {
+      reportError(err);
+      process.exitCode = 1;
     }
   });
 
@@ -131,9 +163,11 @@ program
   .argument("<spec>", "path to the YAML spec file")
   .option("--prune", "also compute deletions for anything not in the spec", false)
   .option("--show-protected", "also list actions blocked by the default-role/<default> safety guard", false)
-  .action(async (specPath: string, opts: { prune: boolean; showProtected: boolean }) => {
+  .option(SKIP_CHECK_FLAG, SKIP_CHECK_DESCRIPTION)
+  .action(async (specPath: string, opts: { prune: boolean; showProtected: boolean; permissionCheck: boolean }) => {
     try {
       const spec = await loadSpec(specPath);
+      if (opts.permissionCheck) await checkAccess("read");
       const current = await fetchCurrentStateWithProgress();
       const mode: Mode = opts.prune ? "prune" : "additive";
       const plan = buildPlan(spec, current, mode);
@@ -155,9 +189,11 @@ program
   .option("--yes", "skip the interactive confirmation prompt", false)
   .option("--show-protected", "also list actions blocked by the default-role/<default> safety guard", false)
   .option("--no-audit-log", "skip writing an audit log file to ./auditlog/")
-  .action(async (specPath: string, opts: { prune: boolean; yes: boolean; showProtected: boolean; auditLog: boolean }) => {
+  .option(SKIP_CHECK_FLAG, SKIP_CHECK_DESCRIPTION)
+  .action(async (specPath: string, opts: { prune: boolean; yes: boolean; showProtected: boolean; auditLog: boolean; permissionCheck: boolean }) => {
     try {
       const spec = await loadSpec(specPath);
+      if (opts.permissionCheck) await checkAccess("write");
       const current = await fetchCurrentStateWithProgress();
       const mode: Mode = opts.prune ? "prune" : "additive";
       const plan = buildPlan(spec, current, mode);
@@ -220,8 +256,10 @@ program
   .description("delete every tenant, role, group, mapping rule, and authorization from the cluster (except the default-role/<default> safety guard) - no spec needed")
   .option("--yes", "skip the interactive confirmation prompt", false)
   .option("--no-audit-log", "skip writing an audit log file to ./auditlog/")
-  .action(async (opts: { yes: boolean; auditLog: boolean }) => {
+  .option(SKIP_CHECK_FLAG, SKIP_CHECK_DESCRIPTION)
+  .action(async (opts: { yes: boolean; auditLog: boolean; permissionCheck: boolean }) => {
     try {
+      if (opts.permissionCheck) await checkAccess("write");
       const cluster = await gatherClusterInfo();
       const current = await fetchCurrentStateWithProgress();
       const plan = buildPlan(EMPTY_SPEC, current, "prune");

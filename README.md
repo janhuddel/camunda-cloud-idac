@@ -59,7 +59,7 @@ Or install globally and use the `camunda-idac` (or shorter `cci`) command:
 npm install -g camunda-cloud-idac
 
 camunda-idac validate spec.yaml
-camunda-idac ping                       # check cluster connectivity - no spec needed
+camunda-idac ping                       # check cluster connectivity and this client's permissions - no spec needed
 camunda-idac export > spec.yaml         # snapshot the live cluster as a spec YAML - reverse of render, no spec needed
 camunda-idac plan spec.yaml [--prune] [--show-protected]
 camunda-idac apply spec.yaml [--prune] [--yes] [--no-audit-log] [--show-protected]
@@ -76,6 +76,26 @@ confirmation; it refuses to run without `--yes` on a non-interactive shell
 (CI), so a pipeline can never silently confirm a destructive prune.
 `--show-protected` (on `plan`/`apply`) also lists actions that the **Hard
 safety guarantee** above blocked, instead of silently omitting them.
+
+## Required permissions
+
+The client this tool authenticates as (`CAMUNDA_CLIENT_ID`) needs to manage
+authorizations, roles, groups, tenants and mapping rules. The simplest way is
+to assign it to the `admin` role. Camunda's search endpoints don't reject a
+caller without READ permission - they silently return a filtered (often
+empty) result - so without a check a misconfigured client would see an
+"empty" cluster and only fail on the first write. Therefore `plan`/`export`
+(READ) and `apply`/`drop-all` (CREATE/READ/UPDATE/DELETE) run a preflight
+check first and abort before reading any state if permissions are missing.
+`ping` reports the same check (exit 1 if even READ is missing, a warning if
+the client is read-only).
+
+The check accepts membership in the `admin` role, or wildcard
+(`resourceId: "*"`) authorizations on `AUTHORIZATION`, `ROLE`, `GROUP`,
+`TENANT` and `MAPPING_RULE` owned by the client itself or by one of its
+roles/groups (as reported by `/v2/authentication/me`). Authorizations owned
+by a mapping rule aren't considered. For such setups, or clusters with
+authorizations disabled, pass `--no-permission-check`.
 
 ## export
 
@@ -141,7 +161,7 @@ cp .env.example .env   # fill in CAMUNDA_* connection details, then export them
 
 npx tsx src/cli.ts validate spec.yaml          # schema + referential integrity only, no network
 npx tsx src/cli.ts render spec.yaml            # print the fully resolved spec as YAML, no network
-npx tsx src/cli.ts ping                        # check cluster connectivity - no spec needed
+npx tsx src/cli.ts ping                        # check cluster connectivity and this client's permissions - no spec needed
 npx tsx src/cli.ts export                      # print the live cluster's current state as a spec YAML - reverse of render
 npx tsx src/cli.ts plan spec.yaml [--prune] [--show-protected]   # dry-run diff; exit 1 if there's drift or a mapping-rule claim conflict (CI-friendly)
 npx tsx src/cli.ts apply spec.yaml [--prune] [--yes] [--no-audit-log] [--show-protected]
